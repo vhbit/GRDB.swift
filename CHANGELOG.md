@@ -3,7 +3,7 @@ Release Notes
 
 ## 0.81.2
 
-Released September 16, 2016
+Released September 28, 2016
 
 **New**
 
