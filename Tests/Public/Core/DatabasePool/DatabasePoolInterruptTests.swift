@@ -85,8 +85,6 @@ class DatabasePoolInterruptTests: GRDBTestCase {
                 try db.execute("CREATE TABLE items (id INTEGER PRIMARY KEY)")
             }
             
-            // We execute a statement that calls a function which waits for the interrupt
-            
             // Block 1                      Block 2
             // INSERT INTO items (id) VALUES (1)
             // INSERT INTO items (id) VALUES (2)
