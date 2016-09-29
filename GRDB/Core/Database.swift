@@ -376,6 +376,10 @@ public final class Database {
         selectStatementCache = [:]
     }
     
+    func interrupt() {
+        sqlite3_interrupt(sqliteConnection)
+    }
+    
     private func setupForeignKeys() throws {
         // Foreign keys are disabled by default with SQLite3
         if configuration.foreignKeysEnabled {

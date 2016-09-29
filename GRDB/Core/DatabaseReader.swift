@@ -112,6 +112,12 @@ public protocol DatabaseReader : class {
     
     /// Remove a collation.
     func remove(collation: DatabaseCollation)
+    
+    
+    // MARK: - Interrupt
+    
+    /// TODO
+    func interrupt()
 }
 
 extension DatabaseReader {

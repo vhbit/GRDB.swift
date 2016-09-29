@@ -59,6 +59,7 @@
     - DatabaseQueueReleaseMemoryTests
     - DatabasePoolBackupTests
     - DatabasePoolConcurrencyTests
+    - DatabasePoolInterruptTests
     - DatabasePoolReadOnlyTests
     - DatabaseQueueConcurrencyTests
 - [ ] FetchedRecordsController throttling (suggested by @hdlj)

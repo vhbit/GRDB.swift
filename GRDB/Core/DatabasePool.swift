@@ -369,6 +369,17 @@ extension DatabasePool : DatabaseReader {
         writer.sync { db in db.remove(collation: collation) }
         readerPool.forEach { $0.sync { db in db.remove(collation: collation) } }
     }
+    
+    
+    // MARK: - Interrupt
+    
+    /// TODO
+    public func interrupt() {
+        writer.interrupt()
+        readerPool.forEach { reader in
+            reader.interrupt()
+        }
+    }
 }
 
 

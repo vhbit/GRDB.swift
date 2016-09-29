@@ -287,6 +287,14 @@ extension DatabaseQueue : DatabaseReader {
             db.remove(collation: collation)
         }
     }
+    
+    
+    // MARK: - Interrupt
+    
+    /// TODO
+    public func interrupt() {
+        serializedDatabase.interrupt()
+    }
 }
 
 

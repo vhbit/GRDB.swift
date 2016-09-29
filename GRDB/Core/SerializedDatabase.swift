@@ -110,4 +110,9 @@ final class SerializedDatabase {
     func preconditionValidQueue(_ message: @autoclosure() -> String = "Database was not used on the correct thread.", file: StaticString = #file, line: UInt = #line) {
         SchedulingWatchdog.preconditionValidQueue(db, message, file: file, line: line)
     }
+    
+    // Doesn't honor the database queue
+    func interrupt() {
+        db.interrupt()
+    }
 }
