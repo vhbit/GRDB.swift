@@ -19,6 +19,9 @@
       <FileRef
          location = "group:MyPlayground.playground">
       </FileRef>
+      <FileRef
+         location = "group:/Users/groue/Documents/git/groue/GRDB.swift/Playgrounds/MirrorPersistable.playground">
+      </FileRef>
    </Group>
    <FileRef
       location = "group:GRDB.xcodeproj">

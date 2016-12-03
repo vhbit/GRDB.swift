@@ -568,7 +568,61 @@ extension Persistable {
             try insert(db)
         }
     }
-    
+}
+
+
+// MARK: - MirrorPersistable
+
+public protocol MirrorPersistable {
+}
+
+extension MirrorPersistable {
+    /// Returns a dictionary of key/value pairs built from
+    /// Mirror(reflecting: self).
+    ///
+    ///     struct Person : Persistable, MirrorPersistable {
+    ///         let id: Int64?
+    ///         let name: String
+    ///     }
+    ///
+    ///     // ["id": nil, "name": "Arthur"]
+    ///     Person(id: nil, name: "Arthur").persistentDictionary
+    ///
+    /// The dictionary is built from all property names that contain a
+    /// DatabaseValueConvertible value or nil.
+    public var persistentDictionary: [String: DatabaseValueConvertible?] {
+        var dic: [String: DatabaseValueConvertible?] = [:]
+        for (key, value) in Mirror(reflecting: self).children {
+            guard let key = key else { continue }
+            let valueMirror = Mirror(reflecting: value)
+            switch valueMirror.displayStyle {
+            case .optional?:
+                if let (_, wrapped) = valueMirror.children.first {
+                    if let value = wrapped as? DatabaseValueConvertible {
+                        dic[key] = value
+                    }
+                } else {
+                    // FIXME: Here we add a key for optionals of types that do
+                    // not adopt DatabaseValueConvertible, and thus produce
+                    // a different set of keys depending on the runtime value
+                    // of the persisted object:
+                    //
+                    //     struct T { }
+                    //     struct U : MirrorPersistable {
+                    //         let t: T?
+                    //     }
+                    //     U(t: nil).persistentDictionary // ["t": nil]
+                    //     U(t: T()).persistentDictionary // [:]
+                    dic.updateValue(nil, forKey: key)
+                }
+            default:
+                if let value = value as? DatabaseValueConvertible {
+                    dic[key] = value
+                }
+            }
+        }
+        return dic
+    }
 }
 
 

@@ -96,7 +96,7 @@ open class Record : RowConvertible, TableMapping, Persistable {
     ///
     /// The implementation of the base class Record returns an empty dictionary.
     open var persistentDictionary: [String: DatabaseValueConvertible?] {
-        return [:]
+        return (self as? MirrorPersistable)?.persistentDictionary ?? [:]
     }
     
     /// Notifies the record that it was succesfully inserted.
