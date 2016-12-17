@@ -27,8 +27,19 @@
         ///
         ///     - compareRecordsByPrimaryKey: A boolean that tells if two records
         ///         share the same identity if they share the same primay key.
-        public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main, compareRecordsByPrimaryKey: Bool) throws {
-            try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, compareRecordsByPrimaryKey: compareRecordsByPrimaryKey)
+        public convenience init(
+            _ databaseWriter: DatabaseWriter,
+            sql: String,
+            arguments: StatementArguments? = nil,
+            adapter: RowAdapter? = nil,
+            queue: DispatchQueue = .main,
+            compareRecordsByPrimaryKey: Bool) throws
+        {
+            try self.init(
+                databaseWriter,
+                request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
+                queue: queue,
+                compareRecordsByPrimaryKey: compareRecordsByPrimaryKey)
         }
         
         /// Creates a fetched records controller initialized from a fetch request.
@@ -53,12 +64,26 @@
         ///
         ///     - compareRecordsByPrimaryKey: A boolean that tells if two records
         ///         share the same identity if they share the same primay key.
-        public convenience init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue = .main, compareRecordsByPrimaryKey: Bool) throws where Request: TypedRequest, Request.Fetched == Fetched {
+        public convenience init<Request>(
+            _ databaseWriter: DatabaseWriter,
+            request: Request,
+            queue: DispatchQueue = .main,
+            compareRecordsByPrimaryKey: Bool) throws
+            where Request: TypedRequest, Request.Fetched == Fetched
+        {
             if compareRecordsByPrimaryKey {
                 let rowComparator = try databaseWriter.read { db in try Fetched.primaryKeyRowComparator(db) }
-                try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { rowComparator($0.row, $1.row) })
+                try self.init(
+                    databaseWriter,
+                    request: request,
+                    queue: queue,
+                    elementsAreTheSame: { rowComparator($0.row, $1.row) })
             } else {
-                try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { _ in false })
+                try self.init(
+                    databaseWriter,
+                    request: request,
+                    queue: queue,
+                    elementsAreTheSame: { _ in false })
             }
         }
     }

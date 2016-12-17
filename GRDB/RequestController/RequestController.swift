@@ -53,11 +53,58 @@ public final class RequestController<Fetched> {
     ///
     ///         This function should return true if the two records have the
     ///         same identity. For example, they have the same id.
-    public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main) throws {
-        try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, elementsAreTheSame: { _ in false })
+    public convenience init(
+        _ databaseWriter: DatabaseWriter,
+        sql: String,
+        arguments: StatementArguments? = nil,
+        adapter: RowAdapter? = nil,
+        queue: DispatchQueue = .main) throws
+    {
+        try self.init(
+            databaseWriter,
+            request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
+            queue: queue,
+            elementsAreTheSame: { _ in false })
     }
     
-    init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue, elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>) throws where Request: TypedRequest, Request.Fetched == Fetched {
+    /// Creates a fetched records controller initialized from a fetch request
+    /// from the [Query Interface](https://github.com/groue/GRDB.swift#the-query-interface).
+    ///
+    ///     let request = Wine.order(Column("name"))
+    ///     let controller = RequestController<Wine>(
+    ///         dbQueue,
+    ///         request: request)
+    ///
+    /// - parameters:
+    ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
+    ///     - request: A fetch request.
+    ///     - queue: Optional dispatch queue (defaults to the main queue)
+    ///
+    ///         The fetched records controller delegate will be notified of
+    ///         record changes in this queue. The controller itself must be used
+    ///         from this queue.
+    ///
+    ///         This dispatch queue must be serial.
+    public convenience init<Request>(
+        _ databaseWriter: DatabaseWriter,
+        request: Request,
+        queue: DispatchQueue = .main) throws
+        where Request: TypedRequest, Request.Fetched == Fetched
+    {
+        try self.init(
+            databaseWriter,
+            request: request,
+            queue: queue,
+            elementsAreTheSame: { _ in false })
+    }
+    
+    init<Request>(
+        _ databaseWriter: DatabaseWriter,
+        request: Request,
+        queue: DispatchQueue,
+        elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>) throws
+        where Request: TypedRequest, Request.Fetched == Fetched
+    {
         self.request = try databaseWriter.read { db in try ObservedRequest(db, request: request) }
         self.databaseWriter = databaseWriter
         self.elementsAreTheSame = elementsAreTheSame
@@ -84,8 +131,17 @@ public final class RequestController<Fetched> {
     ///         from this queue.
     ///
     ///         This dispatch queue must be serial.
-    public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main) throws {
-        try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue)
+    public convenience init(
+        _ databaseWriter: DatabaseWriter,
+        sql: String,
+        arguments: StatementArguments? = nil,
+        adapter: RowAdapter? = nil,
+        queue: DispatchQueue = .main) throws
+    {
+        try self.init(
+            databaseWriter,
+            request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
+            queue: queue)
     }
     
     /// Creates a fetched records controller initialized from a fetch request
@@ -106,7 +162,12 @@ public final class RequestController<Fetched> {
     ///         from this queue.
     ///
     ///         This dispatch queue must be serial.
-    public init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue = .main) throws where Request: TypedRequest, Request.Fetched == Fetched {
+    public init<Request>(
+        _ databaseWriter: DatabaseWriter,
+        request: Request,
+        queue: DispatchQueue = .main) throws
+        where Request: TypedRequest, Request.Fetched == Fetched
+    {
         self.request = try databaseWriter.read { db in try ObservedRequest(db, request: request) }
         self.databaseWriter = databaseWriter
         self.queue = queue

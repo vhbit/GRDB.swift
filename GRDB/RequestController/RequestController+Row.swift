@@ -43,8 +43,19 @@ extension RequestController where Fetched: Row {
         ///
         ///         This function should return true if the two records have the
         ///         same identity. For example, they have the same id.
-        public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main, isSameElement: @escaping (Fetched, Fetched) -> Bool) throws {
-            try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, elementsAreTheSame: { isSameElement($0.value, $1.value) })
+        public convenience init(
+            _ databaseWriter: DatabaseWriter,
+            sql: String,
+            arguments: StatementArguments? = nil,
+            adapter: RowAdapter? = nil,
+            queue: DispatchQueue = .main,
+            isSameElement: @escaping (Fetched, Fetched) -> Bool) throws
+        {
+            try self.init(
+                databaseWriter,
+                request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
+                queue: queue,
+                elementsAreTheSame: { isSameElement($0.value, $1.value) })
         }
         
         /// Creates a fetched records controller initialized from a fetch request
@@ -71,8 +82,18 @@ extension RequestController where Fetched: Row {
         ///
         ///         This function should return true if the two records have the
         ///         same identity. For example, they have the same id.
-        public convenience init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue = .main, isSameElement: @escaping (Row, Row) -> Bool) throws where Request: TypedRequest, Request.Fetched == Fetched {
-            try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { isSameElement($0.value, $1.value) })
+        public convenience init<Request>(
+            _ databaseWriter: DatabaseWriter,
+            request: Request,
+            queue: DispatchQueue = .main,
+            isSameElement: @escaping (Row, Row) -> Bool) throws
+            where Request: TypedRequest, Request.Fetched == Fetched
+        {
+            try self.init(
+                databaseWriter,
+                request: request,
+                queue: queue,
+                elementsAreTheSame: { isSameElement($0.value, $1.value) })
         }
         
         

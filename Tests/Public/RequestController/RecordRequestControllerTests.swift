@@ -21,14 +21,14 @@ private class ChangesRecorder<Record: RowConvertible> {
         }
     }
     
-    func controllerWillChange(_ controller: FetchedRecordsController<Record>, count: Int? = nil) {
-        recordsBeforeChanges = controller.fetchedRecords
+    func controllerWillChange(_ controller: RequestController<Record>, count: Int? = nil) {
+        recordsBeforeChanges = controller.fetchedValues
         countBeforeChanges = count
     }
     
     /// The default implementation does nothing.
-    func controllerDidChange(_ controller: FetchedRecordsController<Record>, count: Int? = nil) {
-        recordsAfterChanges = controller.fetchedRecords
+    func controllerDidChange(_ controller: RequestController<Record>, count: Int? = nil) {
+        recordsAfterChanges = controller.fetchedValues
         countAfterChanges = count
         if let transactionExpectation = transactionExpectation {
             transactionExpectation.fulfill()
@@ -83,7 +83,7 @@ private struct Book : RowConvertible {
     }
 }
 
-class FetchedRecordsControllerTests: GRDBTestCase {
+class RecordRequestControllerTests: GRDBTestCase {
 
     override func setup(_ dbWriter: DatabaseWriter) throws {
         try dbWriter.write { db in
@@ -117,10 +117,10 @@ class FetchedRecordsControllerTests: GRDBTestCase {
                 return cervantes.id!
             }
             
-            let controller = try FetchedRecordsController<Book>(dbQueue, sql: "SELECT * FROM books WHERE authorID = ?", arguments: [authorId])
+            let controller = try RequestController<Book>(dbQueue, sql: "SELECT * FROM books WHERE authorID = ?", arguments: [authorId])
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedRecords!.count, 1)
-            XCTAssertEqual(controller.fetchedRecords![0].title, "Don Quixote")
+            XCTAssertEqual(controller.fetchedValues!.count, 1)
+            XCTAssertEqual(controller.fetchedValues![0].title, "Don Quixote")
         }
     }
     
@@ -138,10 +138,10 @@ class FetchedRecordsControllerTests: GRDBTestCase {
             }
             
             let adapter = ColumnMapping(["id": "_id", "authorId": "_authorId", "title": "_title"])
-            let controller = try FetchedRecordsController<Book>(dbQueue, sql: "SELECT id AS _id, authorId AS _authorId, title AS _title FROM books WHERE authorID = ?", arguments: [authorId], adapter: adapter)
+            let controller = try RequestController<Book>(dbQueue, sql: "SELECT id AS _id, authorId AS _authorId, title AS _title FROM books WHERE authorID = ?", arguments: [authorId], adapter: adapter)
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedRecords!.count, 1)
-            XCTAssertEqual(controller.fetchedRecords![0].title, "Don Quixote")
+            XCTAssertEqual(controller.fetchedValues!.count, 1)
+            XCTAssertEqual(controller.fetchedValues![0].title, "Don Quixote")
         }
     }
     
@@ -154,11 +154,11 @@ class FetchedRecordsControllerTests: GRDBTestCase {
             }
             
             let request = Person.order(Column("name"))
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: request)
+            let controller = try RequestController(dbQueue, request: request)
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedRecords!.count, 2)
-            XCTAssertEqual(controller.fetchedRecords![0].name, "Cervantes")
-            XCTAssertEqual(controller.fetchedRecords![1].name, "Plato")
+            XCTAssertEqual(controller.fetchedValues!.count, 2)
+            XCTAssertEqual(controller.fetchedValues![0].name, "Cervantes")
+            XCTAssertEqual(controller.fetchedValues![1].name, "Plato")
         }
     }
     
@@ -171,16 +171,16 @@ class FetchedRecordsControllerTests: GRDBTestCase {
             }
             
             let request = Person.all()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: request)
-            XCTAssertTrue(controller.fetchedRecords == nil)
+            let controller = try RequestController(dbQueue, request: request)
+            XCTAssertTrue(controller.fetchedValues == nil)
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedRecords!.count, 1)
-            XCTAssertEqual(controller.fetchedRecords![0].name, "Arthur")
+            XCTAssertEqual(controller.fetchedValues!.count, 1)
+            XCTAssertEqual(controller.fetchedValues![0].name, "Arthur")
         }
     }
     
     func testDatabaseChangesAreNotReReflectedUntilPerformFetchAndDelegateIsSet() {
-        // TODO: test that controller.fetchedRecords does not eventually change
+        // TODO: test that controller.fetchedValues does not eventually change
         // after a database change. The difficulty of this test lies in the
         // "eventually" word.
     }
@@ -188,7 +188,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testSimpleInsert() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("id")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 recordsWillChange: { recorder.controllerWillChange($0) },
@@ -228,7 +228,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testSimpleUpdate() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("id")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 recordsWillChange: { recorder.controllerWillChange($0) },
@@ -286,7 +286,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testSimpleDelete() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("id")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 recordsWillChange: { recorder.controllerWillChange($0) },
@@ -334,7 +334,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testSimpleMove() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("name")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("name")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 recordsWillChange: { recorder.controllerWillChange($0) },
@@ -371,7 +371,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testSideTableChange() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(
+            let controller = try RequestController<Person>(
                 dbQueue,
                 sql: ("SELECT persons.*, COUNT(books.id) AS bookCount " +
                     "FROM persons " +
@@ -425,7 +425,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
             let request = Person.select(Column("name")).order(Column("name"))
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: request)
+            let controller = try RequestController(dbQueue, request: request)
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 recordsWillChange: { recorder.controllerWillChange($0) },
@@ -501,7 +501,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testSetCallbacksAfterUpdate() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("name")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("name")))
             let recorder = ChangesRecorder<Person>()
             try controller.performFetch()
             
@@ -528,13 +528,13 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testTrailingClosureCallback() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("name")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("name")))
             var persons: [Person] = []
             try controller.performFetch()
             
             let expectation = self.expectation(description: "expectation")
             controller.trackChanges {
-                persons = $0.fetchedRecords!
+                persons = $0.fetchedValues!
                 expectation.fulfill()
             }
             try dbQueue.inTransaction { db in
@@ -550,7 +550,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testFetchAlongside() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.order(Column("id")))
+            let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 fetchAlongside: { db in try Person.fetchCount(db) },
@@ -595,7 +595,7 @@ class FetchedRecordsControllerTests: GRDBTestCase {
     func testFetchErrors() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
-            let controller = try FetchedRecordsController<Person>(dbQueue, request: Person.all())
+            let controller = try RequestController(dbQueue, request: Person.all())
             
             let expectation = self.expectation(description: "expectation")
             var error: Error?
