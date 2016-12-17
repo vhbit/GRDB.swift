@@ -215,26 +215,39 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
         }
     }
     
-    // TODO: make it a collection
-    extension FetchedRecordsSectionInfo where Fetched: DatabaseValueConvertible {
-        /// The array of records in the section.
-        public var values: [Fetched] {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.map { $0.value }
+    extension RequestController where Fetched: DatabaseValueConvertible {
+        // MARK: - Querying Sections Information
+        
+        /// The sections for the fetched records (iOS only).
+        ///
+        /// You typically use the sections array when implementing
+        /// UITableViewDataSource methods, such as `numberOfSectionsInTableView`.
+        ///
+        /// The sections array is never empty, even when there are no fetched
+        /// records. In this case, there is a single empty section.
+        public var sections: [RequestSection<Fetched>] {
+            // We only support a single section so far.
+            // We also return a single section when there are no fetched
+            // records, just like NSFetchedResultsController.
+            return [RequestSection(controller: self, unwrap: { $0.value })]
         }
     }
     
-    extension FetchedRecordsSectionInfo where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-        /// The array of records in the section.
-        public var values: [Fetched] {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.map { $0.value }
+    extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
+        // MARK: - Querying Sections Information
+        
+        /// The sections for the fetched records (iOS only).
+        ///
+        /// You typically use the sections array when implementing
+        /// UITableViewDataSource methods, such as `numberOfSectionsInTableView`.
+        ///
+        /// The sections array is never empty, even when there are no fetched
+        /// records. In this case, there is a single empty section.
+        public var sections: [RequestSection<Fetched>] {
+            // We only support a single section so far.
+            // We also return a single section when there are no fetched
+            // records, just like NSFetchedResultsController.
+            return [RequestSection(controller: self, unwrap: { $0.value })]
         }
     }
     

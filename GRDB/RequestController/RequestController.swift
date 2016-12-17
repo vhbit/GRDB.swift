@@ -669,27 +669,10 @@ fileprivate func makeFetchFunction<Fetched, T>(
 // MARK: - UITableView Support
 
 #if os(iOS)
-    extension RequestController {
-        // MARK: - Querying Sections Information
-        
-        /// The sections for the fetched records (iOS only).
-        ///
-        /// You typically use the sections array when implementing
-        /// UITableViewDataSource methods, such as `numberOfSectionsInTableView`.
-        ///
-        /// The sections array is never empty, even when there are no fetched
-        /// records. In this case, there is a single empty section.
-        public var sections: [FetchedRecordsSectionInfo<Fetched>] {
-            // We only support a single section so far.
-            // We also return a single section when there are no fetched
-            // records, just like NSFetchedResultsController.
-            return [FetchedRecordsSectionInfo(controller: self)]
-        }
-    }
-    
     /// A section given by a RequestController.
-    public struct FetchedRecordsSectionInfo<Fetched> {
+    public struct RequestSection<Fetched> : Collection {
         let controller: RequestController<Fetched>
+        let unwrap: (AnyFetchable<Fetched>) -> Fetched
         
         /// The number of records (rows) in the section.
         public var count: Int {
@@ -698,6 +681,38 @@ fileprivate func makeFetchFunction<Fetched, T>(
                 fatalError("the performFetch() method must be called before accessing section contents")
             }
             return items.count
+        }
+        
+        /// The index of the first element.
+        public var startIndex: Int {
+            return 0
+        }
+        
+        /// The "past-the-end" index, successor of the index of the last
+        /// element.
+        public var endIndex: Int {
+            return count
+        }
+        
+        /// Accesses the (ColumnName, DatabaseValue) pair at given index.
+        public subscript(index: Int) -> Fetched {
+            guard let items = controller.fetchedItems else {
+                // Programmer error
+                fatalError("the performFetch() method must be called before accessing section contents")
+            }
+            return unwrap(items[index])
+        }
+        
+        /// Returns the position immediately after `i`.
+        ///
+        /// - Precondition: `(startIndex..<endIndex).contains(i)`
+        public func index(after i: Int) -> Int {
+            return i + 1
+        }
+        
+        /// Replaces `i` with its successor.
+        public func formIndex(after i: inout Int) {
+            i += 1
         }
     }
     
