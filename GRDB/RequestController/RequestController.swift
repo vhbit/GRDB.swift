@@ -8,18 +8,18 @@
 /// more information.
 public final class RequestController<Fetched> {
     // The items
-    fileprivate var fetchedItems: [AnyFetchable<Fetched>]?
+    var fetchedItems: [AnyFetchable<Fetched>]?
     
     #if os(iOS)
-    // The record comparator
-    fileprivate var elementsAreTheSame: ItemComparator<Fetched>
+    // The value comparator
+    var elementsAreTheSame: AnyFetchableComparator<Fetched>
     #endif
     
     // The request
-    fileprivate var request: ObservedRequest<Fetched>
+    var request: ObservedRequest<Fetched>
     
     // The eventual current database observer
-    fileprivate var observer: FetchedRecordsObserver<Fetched>?
+    var observer: RequestObserver<Fetched>?
     
     // The eventual error handler
     fileprivate var errorHandler: ((RequestController<Fetched>, Error) -> ())?
@@ -57,7 +57,7 @@ public final class RequestController<Fetched> {
         try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, elementsAreTheSame: { _ in false })
     }
     
-    fileprivate init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue, elementsAreTheSame: @escaping ItemComparator<Fetched>) throws where Request: TypedRequest, Request.Fetched == Fetched {
+    init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue, elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>) throws where Request: TypedRequest, Request.Fetched == Fetched {
         self.request = try databaseWriter.read { db in try ObservedRequest(db, request: request) }
         self.databaseWriter = databaseWriter
         self.elementsAreTheSame = elementsAreTheSame
@@ -132,7 +132,7 @@ public final class RequestController<Fetched> {
             let initialItems = try request.fetchAll(db)
             fetchedItems = initialItems
             if let fetchAndNotifyChanges = fetchAndNotifyChanges {
-                let observer = FetchedRecordsObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
+                let observer = RequestObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
                 self.observer = observer
                 observer.items = initialItems
                 db.add(transactionObserver: observer)
@@ -173,7 +173,7 @@ public final class RequestController<Fetched> {
         // and notify eventual changes
         let initialItems = fetchedItems
         databaseWriter.write { db in
-            let observer = FetchedRecordsObserver(selectionInfo: self.request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
+            let observer = RequestObserver(selectionInfo: self.request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
             self.observer = observer
             observer.items = initialItems
             db.add(transactionObserver: observer)
@@ -187,24 +187,6 @@ public final class RequestController<Fetched> {
     public func setRequest(sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil) throws {
         try setRequest(SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self))
     }
-    
-    #if os(iOS)
-    #else
-    /// Registers changes notification callbacks.
-    ///
-    /// - parameters:
-    ///     - recordsWillChange: Invoked before records are updated.
-    ///     - recordsDidChange: Invoked after records have been updated.
-    public func trackChanges(
-        recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-        recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
-    {
-        trackChanges(
-            fetchAlongside: { _ in },
-            recordsWillChange: recordsWillChange.flatMap { callback in { (controller, _) in callback(controller) } },
-            recordsDidChange: recordsDidChange.flatMap { callback in { (controller, _) in callback(controller) } })
-    }
-    #endif
     
     /// Registers a callback for changes tracking errors.
     ///
@@ -220,304 +202,23 @@ public final class RequestController<Fetched> {
     }
 }
 
-#if os(iOS)
-    extension RequestController where Fetched: Row {
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
-        {
-            trackChanges(
-                fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.map { recordsWillChange in { (controller, _) in recordsWillChange(controller) } },
-                tableViewEvent: tableViewEvent,
-                recordsDidChange: recordsDidChange.map { recordsDidChange in { (controller, _) in recordsDidChange(controller) } })
-        }
-        
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
-        ///       `fetchedAlongside` argument. The closure is guaranteed to see the
-        ///       database in the state it has just after eventual changes to the
-        ///       fetched records have been performed. Use it in order to fetch
-        ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges<T>(
-            fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
-        {
-            // If some changes are currently processed, make sure they are
-            // discarded because they would trigger previously set callbacks.
-            observer?.invalidate()
-            observer = nil
-            
-            guard (recordsWillChange != nil) || (tableViewEvent != nil) || (recordsDidChange != nil) else {
-                // Stop tracking
-                return
-            }
-            
-            let initialItems = fetchedItems
-            databaseWriter.write { db in
-                let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(
-                    controller: self,
-                    fetchAlongside: fetchAlongside,
-                    elementsAreTheSame: elementsAreTheSame,
-                    recordsWillChange: recordsWillChange,
-                    handleChanges: tableViewEvent.map { tableViewEvent in
-                        { (controller, changes) in
-                            for change in changes {
-                                tableViewEvent(controller, change.value, change.event)
-                            }
-                        }
-                }, recordsDidChange: recordsDidChange)
-                let observer = FetchedRecordsObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
-                self.observer = observer
-                if let initialItems = initialItems {
-                    observer.items = initialItems
-                    db.add(transactionObserver: observer)
-                    observer.fetchAndNotifyChanges(observer)
-                }
-            }
-        }
-    }
-    
-    extension RequestController where Fetched: RowConvertible {
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
-        {
-            trackChanges(
-                fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.map { recordsWillChange in { (controller, _) in recordsWillChange(controller) } },
-                tableViewEvent: tableViewEvent,
-                recordsDidChange: recordsDidChange.map { recordsDidChange in { (controller, _) in recordsDidChange(controller) } })
-        }
-        
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
-        ///       `fetchedAlongside` argument. The closure is guaranteed to see the
-        ///       database in the state it has just after eventual changes to the
-        ///       fetched records have been performed. Use it in order to fetch
-        ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges<T>(
-            fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
-        {
-            // If some changes are currently processed, make sure they are
-            // discarded because they would trigger previously set callbacks.
-            observer?.invalidate()
-            observer = nil
-            
-            guard (recordsWillChange != nil) || (tableViewEvent != nil) || (recordsDidChange != nil) else {
-                // Stop tracking
-                return
-            }
-            
-            let initialItems = fetchedItems
-            databaseWriter.write { db in
-                let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(
-                    controller: self,
-                    fetchAlongside: fetchAlongside,
-                    elementsAreTheSame: elementsAreTheSame,
-                    recordsWillChange: recordsWillChange,
-                    handleChanges: tableViewEvent.map { tableViewEvent in
-                        { (controller, changes) in
-                            for change in changes {
-                                tableViewEvent(controller, change.value, change.event)
-                            }
-                        }
-                }, recordsDidChange: recordsDidChange)
-                let observer = FetchedRecordsObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
-                self.observer = observer
-                if let initialItems = initialItems {
-                    observer.items = initialItems
-                    db.add(transactionObserver: observer)
-                    observer.fetchAndNotifyChanges(observer)
-                }
-            }
-        }
-    }
-    
-    extension RequestController where Fetched: DatabaseValueConvertible {
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
-        {
-            trackChanges(
-                fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.map { recordsWillChange in { (controller, _) in recordsWillChange(controller) } },
-                tableViewEvent: tableViewEvent,
-                recordsDidChange: recordsDidChange.map { recordsDidChange in { (controller, _) in recordsDidChange(controller) } })
-        }
-        
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
-        ///       `fetchedAlongside` argument. The closure is guaranteed to see the
-        ///       database in the state it has just after eventual changes to the
-        ///       fetched records have been performed. Use it in order to fetch
-        ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges<T>(
-            fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
-        {
-            // If some changes are currently processed, make sure they are
-            // discarded because they would trigger previously set callbacks.
-            observer?.invalidate()
-            observer = nil
-            
-            guard (recordsWillChange != nil) || (tableViewEvent != nil) || (recordsDidChange != nil) else {
-                // Stop tracking
-                return
-            }
-            
-            let initialItems = fetchedItems
-            databaseWriter.write { db in
-                let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(
-                    controller: self,
-                    fetchAlongside: fetchAlongside,
-                    elementsAreTheSame: elementsAreTheSame,
-                    recordsWillChange: recordsWillChange,
-                    handleChanges: tableViewEvent.map { tableViewEvent in
-                        { (controller, changes) in
-                            for change in changes {
-                                tableViewEvent(controller, change.value, change.event)
-                            }
-                        }
-                }, recordsDidChange: recordsDidChange)
-                let observer = FetchedRecordsObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
-                self.observer = observer
-                if let initialItems = initialItems {
-                    observer.items = initialItems
-                    db.add(transactionObserver: observer)
-                    observer.fetchAndNotifyChanges(observer)
-                }
-            }
-        }
-    }
-    
-    extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
-        {
-            trackChanges(
-                fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.map { recordsWillChange in { (controller, _) in recordsWillChange(controller) } },
-                tableViewEvent: tableViewEvent,
-                recordsDidChange: recordsDidChange.map { recordsDidChange in { (controller, _) in recordsDidChange(controller) } })
-        }
-        
-        /// Registers changes notification callbacks (iOS only).
-        ///
-        /// - parameters:
-        ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
-        ///       `fetchedAlongside` argument. The closure is guaranteed to see the
-        ///       database in the state it has just after eventual changes to the
-        ///       fetched records have been performed. Use it in order to fetch
-        ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
-        ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
-        public func trackChanges<T>(
-            fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
-        {
-            // If some changes are currently processed, make sure they are
-            // discarded because they would trigger previously set callbacks.
-            observer?.invalidate()
-            observer = nil
-            
-            guard (recordsWillChange != nil) || (tableViewEvent != nil) || (recordsDidChange != nil) else {
-                // Stop tracking
-                return
-            }
-            
-            let initialItems = fetchedItems
-            databaseWriter.write { db in
-                let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(
-                    controller: self,
-                    fetchAlongside: fetchAlongside,
-                    elementsAreTheSame: elementsAreTheSame,
-                    recordsWillChange: recordsWillChange,
-                    handleChanges: tableViewEvent.map { tableViewEvent in
-                        { (controller, changes) in
-                            for change in changes {
-                                tableViewEvent(controller, change.value, change.event)
-                            }
-                        }
-                }, recordsDidChange: recordsDidChange)
-                let observer = FetchedRecordsObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
-                self.observer = observer
-                if let initialItems = initialItems {
-                    observer.items = initialItems
-                    db.add(transactionObserver: observer)
-                    observer.fetchAndNotifyChanges(observer)
-                }
-            }
-        }
-    }
-#else
+#if !os(iOS)
     extension RequestController {
+        /// Registers changes notification callbacks.
+        ///
+        /// - parameters:
+        ///     - recordsWillChange: Invoked before records are updated.
+        ///     - recordsDidChange: Invoked after records have been updated.
+        public func trackChanges(
+            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
+            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
+        {
+            trackChanges(
+                fetchAlongside: { _ in },
+                recordsWillChange: recordsWillChange.flatMap { callback in { (controller, _) in callback(controller) } },
+                recordsDidChange: recordsDidChange.flatMap { callback in { (controller, _) in callback(controller) } })
+        }
+        
         /// Registers changes notification callbacks.
         ///
         /// - parameters:
@@ -547,7 +248,7 @@ public final class RequestController<Fetched> {
             let initialItems = fetchedItems
             databaseWriter.write { db in
                 let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(controller: self, fetchAlongside: fetchAlongside, recordsWillChange: recordsWillChange, recordsDidChange: recordsDidChange)
-                let observer = FetchedRecordsObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
+                let observer = RequestObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
                 self.observer = observer
                 if let initialItems = initialItems {
                     observer.items = initialItems
@@ -559,271 +260,7 @@ public final class RequestController<Fetched> {
     }
 #endif
 
-#if os(iOS)
-    extension RequestController where Fetched: Row {
-        
-        // MARK: - Initialization
-        
-        /// Creates a fetched records controller initialized from a SQL query and
-        /// its eventual arguments.
-        ///
-        ///     let controller = RequestController<Wine>(
-        ///         dbQueue,
-        ///         sql: "SELECT * FROM wines WHERE color = ? ORDER BY name",
-        ///         arguments: [Color.red],
-        ///         isSameElement: { (wine1, wine2) in wine1.id == wine2.id })
-        ///
-        /// - parameters:
-        ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
-        ///     - sql: An SQL query.
-        ///     - arguments: Optional statement arguments.
-        ///     - adapter: Optional RowAdapter
-        ///     - queue: Optional dispatch queue (defaults to the main queue)
-        ///
-        ///         The fetched records controller delegate will be notified of
-        ///         record changes in this queue. The controller itself must be used
-        ///         from this queue.
-        ///
-        ///         This dispatch queue must be serial.
-        ///
-        ///     - isSameElement: Optional function that compares two records.
-        ///
-        ///         This function should return true if the two records have the
-        ///         same identity. For example, they have the same id.
-        public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main, isSameElement: @escaping (Fetched, Fetched) -> Bool) throws {
-            try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, elementsAreTheSame: { isSameElement($0.value, $1.value) })
-        }
-        
-        /// Creates a fetched records controller initialized from a fetch request
-        /// from the [Query Interface](https://github.com/groue/GRDB.swift#the-query-interface).
-        ///
-        ///     let request = Wine.order(Column("name"))
-        ///     let controller = RequestController<Wine>(
-        ///         dbQueue,
-        ///         request: request,
-        ///         isSameElement: { (wine1, wine2) in wine1.id == wine2.id })
-        ///
-        /// - parameters:
-        ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
-        ///     - request: A fetch request.
-        ///     - queue: Optional dispatch queue (defaults to the main queue)
-        ///
-        ///         The fetched records controller delegate will be notified of
-        ///         record changes in this queue. The controller itself must be used
-        ///         from this queue.
-        ///
-        ///         This dispatch queue must be serial.
-        ///
-        ///     - isSameElement: Optional function that compares two records.
-        ///
-        ///         This function should return true if the two records have the
-        ///         same identity. For example, they have the same id.
-        public convenience init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue = .main, isSameElement: @escaping (Row, Row) -> Bool) throws where Request: TypedRequest, Request.Fetched == Fetched {
-            try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { isSameElement($0.value, $1.value) })
-        }
-    }
-    
-    extension RequestController where Fetched: RowConvertible {
-        
-        // MARK: - Initialization
-        
-        /// Creates a fetched records controller initialized from a SQL query and
-        /// its eventual arguments.
-        ///
-        ///     let controller = RequestController<Wine>(
-        ///         dbQueue,
-        ///         sql: "SELECT * FROM wines WHERE color = ? ORDER BY name",
-        ///         arguments: [Color.red],
-        ///         isSameElement: { (wine1, wine2) in wine1.id == wine2.id })
-        ///
-        /// - parameters:
-        ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
-        ///     - sql: An SQL query.
-        ///     - arguments: Optional statement arguments.
-        ///     - adapter: Optional RowAdapter
-        ///     - queue: Optional dispatch queue (defaults to the main queue)
-        ///
-        ///         The fetched records controller delegate will be notified of
-        ///         record changes in this queue. The controller itself must be used
-        ///         from this queue.
-        ///
-        ///         This dispatch queue must be serial.
-        ///
-        ///     - isSameElement: Optional function that compares two records.
-        ///
-        ///         This function should return true if the two records have the
-        ///         same identity. For example, they have the same id.
-        public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main, isSameElement: @escaping (Fetched, Fetched) -> Bool) throws {
-            try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, elementsAreTheSame: { isSameElement($0.value, $1.value) })
-        }
-        
-        /// Creates a fetched records controller initialized from a fetch request
-        /// from the [Query Interface](https://github.com/groue/GRDB.swift#the-query-interface).
-        ///
-        ///     let request = Wine.order(Column("name"))
-        ///     let controller = RequestController<Wine>(
-        ///         dbQueue,
-        ///         request: request,
-        ///         isSameElement: { (wine1, wine2) in wine1.id == wine2.id })
-        ///
-        /// - parameters:
-        ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
-        ///     - request: A fetch request.
-        ///     - queue: Optional dispatch queue (defaults to the main queue)
-        ///
-        ///         The fetched records controller delegate will be notified of
-        ///         record changes in this queue. The controller itself must be used
-        ///         from this queue.
-        ///
-        ///         This dispatch queue must be serial.
-        ///
-        ///     - isSameElement: Optional function that compares two records.
-        ///
-        ///         This function should return true if the two records have the
-        ///         same identity. For example, they have the same id.
-        public convenience init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue = .main, isSameElement: @escaping (Fetched, Fetched) -> Bool) throws where Request: TypedRequest, Request.Fetched == Fetched {
-            try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { isSameElement($0.value, $1.value) })
-        }
-    }
-    
-    extension RequestController where Fetched: TableMapping {
-        
-        // MARK: - Initialization
-        
-        /// Creates a fetched records controller initialized from a SQL query and
-        /// its eventual arguments.
-        ///
-        ///     let controller = RequestController<Wine>(
-        ///         dbQueue,
-        ///         sql: "SELECT * FROM wines WHERE color = ? ORDER BY name",
-        ///         arguments: [Color.red],
-        ///         compareRecordsByPrimaryKey: true)
-        ///
-        /// - parameters:
-        ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
-        ///     - sql: An SQL query.
-        ///     - arguments: Optional statement arguments.
-        ///     - adapter: Optional RowAdapter
-        ///     - queue: Optional dispatch queue (defaults to the main queue)
-        ///
-        ///         The fetched records controller delegate will be notified of
-        ///         record changes in this queue. The controller itself must be used
-        ///         from this queue.
-        ///
-        ///         This dispatch queue must be serial.
-        ///
-        ///     - compareRecordsByPrimaryKey: A boolean that tells if two records
-        ///         share the same identity if they share the same primay key.
-        public convenience init(_ databaseWriter: DatabaseWriter, sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil, queue: DispatchQueue = .main, compareRecordsByPrimaryKey: Bool) throws {
-            try self.init(databaseWriter, request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self), queue: queue, compareRecordsByPrimaryKey: compareRecordsByPrimaryKey)
-        }
-        
-        /// Creates a fetched records controller initialized from a fetch request.
-        /// from the [Query Interface](https://github.com/groue/GRDB.swift#the-query-interface).
-        ///
-        ///     let request = Wine.order(Column("name"))
-        ///     let controller = RequestController<Wine>(
-        ///         dbQueue,
-        ///         request: request,
-        ///         compareRecordsByPrimaryKey: true)
-        ///
-        /// - parameters:
-        ///     - databaseWriter: A DatabaseWriter (DatabaseQueue, or DatabasePool)
-        ///     - request: A fetch request.
-        ///     - queue: Optional dispatch queue (defaults to the main queue)
-        ///
-        ///         The fetched records controller delegate will be notified of
-        ///         record changes in this queue. The controller itself must be used
-        ///         from this queue.
-        ///
-        ///         This dispatch queue must be serial.
-        ///
-        ///     - compareRecordsByPrimaryKey: A boolean that tells if two records
-        ///         share the same identity if they share the same primay key.
-        public convenience init<Request>(_ databaseWriter: DatabaseWriter, request: Request, queue: DispatchQueue = .main, compareRecordsByPrimaryKey: Bool) throws where Request: TypedRequest, Request.Fetched == Fetched {
-            if compareRecordsByPrimaryKey {
-                let rowComparator = try databaseWriter.read { db in try Fetched.primaryKeyRowComparator(db) }
-                try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { rowComparator($0.row, $1.row) })
-            } else {
-                try self.init(databaseWriter, request: request, queue: queue, elementsAreTheSame: { _ in false })
-            }
-        }
-    }
-#endif
-
-extension RequestController where Fetched: Row {
-    // MARK: - Accessing Records
-    
-    /// The fetched records.
-    ///
-    /// The value of this property is nil if performFetch() hasn't been called.
-    ///
-    /// The records reflect the state of the database after the initial
-    /// call to performFetch, and after each database transaction that affects
-    /// the results of the fetch request.
-    public var fetchedRecords: [Fetched]? {
-        guard let fetchedItems = fetchedItems else {
-            return nil
-        }
-        return fetchedItems.map { $0.value }
-    }
-}
-
-extension RequestController where Fetched: RowConvertible {
-    // MARK: - Accessing Records
-    
-    /// The fetched records.
-    ///
-    /// The value of this property is nil if performFetch() hasn't been called.
-    ///
-    /// The records reflect the state of the database after the initial
-    /// call to performFetch, and after each database transaction that affects
-    /// the results of the fetch request.
-    public var fetchedRecords: [Fetched]? {
-        guard let fetchedItems = fetchedItems else {
-            return nil
-        }
-        return fetchedItems.map { $0.value }
-    }
-}
-
-extension RequestController where Fetched: DatabaseValueConvertible {
-    // MARK: - Accessing Records
-    
-    /// The fetched records.
-    ///
-    /// The value of this property is nil if performFetch() hasn't been called.
-    ///
-    /// The records reflect the state of the database after the initial
-    /// call to performFetch, and after each database transaction that affects
-    /// the results of the fetch request.
-    public var fetchedRecords: [Fetched]? {
-        guard let fetchedItems = fetchedItems else {
-            return nil
-        }
-        return fetchedItems.map { $0.value }
-    }
-}
-
-extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-    // MARK: - Accessing Records
-    
-    /// The fetched records.
-    ///
-    /// The value of this property is nil if performFetch() hasn't been called.
-    ///
-    /// The records reflect the state of the database after the initial
-    /// call to performFetch, and after each database transaction that affects
-    /// the results of the fetch request.
-    public var fetchedRecords: [Fetched]? {
-        guard let fetchedItems = fetchedItems else {
-            return nil
-        }
-        return fetchedItems.map { $0.value }
-    }
-}
-
-fileprivate struct ObservedRequest<T> : TypedRequest {
+struct ObservedRequest<T> : TypedRequest {
     typealias Fetched = AnyFetchable<T>
     let request: AnyRequest
     let selectionInfo: SelectStatement.SelectionInfo
@@ -840,82 +277,13 @@ fileprivate struct ObservedRequest<T> : TypedRequest {
 }
 
 
-// MARK: - FetchedRecordsObserver
-
-/// RequestController adopts TransactionObserverType so that it can
-/// monitor changes to its fetched records.
-private final class FetchedRecordsObserver<Fetched> : TransactionObserver {
-    var isValid: Bool
-    var needsComputeChanges: Bool
-    var items: [AnyFetchable<Fetched>]!  // ought to be not nil when observer has started tracking transactions
-    let queue: DispatchQueue // protects items
-    let selectionInfo: SelectStatement.SelectionInfo
-    var fetchAndNotifyChanges: (FetchedRecordsObserver<Fetched>) -> ()
-    
-    init(selectionInfo: SelectStatement.SelectionInfo, fetchAndNotifyChanges: @escaping (FetchedRecordsObserver<Fetched>) -> ()) {
-        self.isValid = true
-        self.items = nil
-        self.needsComputeChanges = false
-        self.queue = DispatchQueue(label: "GRDB.FetchedRecordsObserver")
-        self.selectionInfo = selectionInfo
-        self.fetchAndNotifyChanges = fetchAndNotifyChanges
-    }
-    
-    func invalidate() {
-        isValid = false
-    }
-    
-    func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool {
-        switch eventKind {
-        case .delete(let tableName):
-            return selectionInfo.contains(anyColumnFrom: tableName)
-        case .insert(let tableName):
-            return selectionInfo.contains(anyColumnFrom: tableName)
-        case .update(let tableName, let updatedColumnNames):
-            return selectionInfo.contains(anyColumnIn: updatedColumnNames, from: tableName)
-        }
-    }
-    
-    #if SQLITE_ENABLE_PREUPDATE_HOOK
-    /// Part of the TransactionObserverType protocol
-    func databaseWillChange(with event: DatabasePreUpdateEvent) { }
-    #endif
-    
-    /// Part of the TransactionObserverType protocol
-    func databaseDidChange(with event: DatabaseEvent) {
-        needsComputeChanges = true
-    }
-    
-    /// Part of the TransactionObserverType protocol
-    func databaseWillCommit() throws { }
-    
-    /// Part of the TransactionObserverType protocol
-    func databaseDidRollback(_ db: Database) {
-        needsComputeChanges = false
-    }
-    
-    /// Part of the TransactionObserverType protocol
-    func databaseDidCommit(_ db: Database) {
-        // The databaseDidCommit callback is called in the database writer
-        // dispatch queue, which is serialized: it is guaranteed to process the
-        // last database transaction.
-        
-        // Were observed tables modified?
-        guard needsComputeChanges else { return }
-        needsComputeChanges = false
-        
-        fetchAndNotifyChanges(self)
-    }
-}
-
-
 // MARK: - Changes
 
 fileprivate func makeFetchFunction<Fetched, T>(
     controller: RequestController<Fetched>,
     fetchAlongside: @escaping (Database) throws -> T,
-    completion: @escaping (Result<(fetchedItems: [AnyFetchable<Fetched>], fetchedAlongside: T, observer: FetchedRecordsObserver<Fetched>)>) -> ()
-    ) -> (FetchedRecordsObserver<Fetched>) -> ()
+    completion: @escaping (Result<(fetchedItems: [AnyFetchable<Fetched>], fetchedAlongside: T, observer: RequestObserver<Fetched>)>) -> ()
+    ) -> (RequestObserver<Fetched>) -> ()
 {
     // Make sure we keep a weak reference to the fetched records controller,
     // so that the user can use unowned references in callbacks:
@@ -984,14 +352,14 @@ fileprivate func makeFetchFunction<Fetched, T>(
 }
 
 #if os(iOS)
-    fileprivate func makeFetchAndNotifyChangesFunction<Fetched, T>(
+    func makeFetchAndNotifyChangesFunction<Fetched, T>(
         controller: RequestController<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
-        elementsAreTheSame: @escaping ItemComparator<Fetched>,
+        elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>,
         recordsWillChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
         handleChanges: ((_ controller: RequestController<Fetched>, _ changes: [TableViewChange<Fetched>]) -> ())?,
         recordsDidChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
-        ) -> (FetchedRecordsObserver<Fetched>) -> ()
+        ) -> (RequestObserver<Fetched>) -> ()
     {
         // Make sure we keep a weak reference to the fetched records controller,
         // so that the user can use unowned references in callbacks:
@@ -1021,7 +389,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     if tableViewChanges.isEmpty { return }
                 } else {
                     // Don't compute changes: just look for a row difference:
-                    if identicalItemArrays(fetchedItems, observer.items) { return }
+                    if fetchedItems == observer.items { return }
                     tableViewChanges = []
                 }
                 
@@ -1046,7 +414,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
     }
     
-    fileprivate func computeTableViewChanges<Fetched>(from s: [AnyFetchable<Fetched>], to t: [AnyFetchable<Fetched>], elementsAreTheSame: ItemComparator<Fetched>) -> [TableViewChange<Fetched>] {
+    fileprivate func computeTableViewChanges<Fetched>(from s: [AnyFetchable<Fetched>], to t: [AnyFetchable<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [TableViewChange<Fetched>] {
         let m = s.count
         let n = t.count
         
@@ -1105,13 +473,13 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
         
         /// Returns an array where deletion/insertion pairs of the same element are replaced by `.move` change.
-        func standardize(changes: [TableViewChange<Fetched>], elementsAreTheSame: ItemComparator<Fetched>) -> [TableViewChange<Fetched>] {
+        func standardize(changes: [TableViewChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [TableViewChange<Fetched>] {
             
             /// Returns a potential .move or .update if *change* has a matching change in *changes*:
             /// If *change* is a deletion or an insertion, and there is a matching inverse
             /// insertion/deletion with the same value in *changes*, a corresponding .move or .update is returned.
             /// As a convenience, the index of the matched change is returned as well.
-            func merge(change: TableViewChange<Fetched>, in changes: [TableViewChange<Fetched>], elementsAreTheSame: ItemComparator<Fetched>) -> (mergedChange: TableViewChange<Fetched>, mergedIndex: Int)? {
+            func merge(change: TableViewChange<Fetched>, in changes: [TableViewChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> (mergedChange: TableViewChange<Fetched>, mergedIndex: Int)? {
                 
                 /// Returns the changes between two rows: a dictionary [key: oldValue]
                 /// Precondition: both rows have the same columns
@@ -1185,12 +553,12 @@ fileprivate func makeFetchFunction<Fetched, T>(
 #else
     /// Returns a function that fetches and notify changes, and erases the type
     /// of values that are fetched alongside tracked records.
-    fileprivate func makeFetchAndNotifyChangesFunction<Fetched, T>(
+    func makeFetchAndNotifyChangesFunction<Fetched, T>(
         controller: RequestController<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
         recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
         recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
-        ) -> (FetchedRecordsObserver<Fetched>) -> ()
+        ) -> (RequestObserver<Fetched>) -> ()
     {
         // Make sure we keep a weak reference to the fetched records controller,
         // so that the user can use unowned references in callbacks:
@@ -1213,7 +581,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                 
             case .success((fetchedItems: let fetchedItems, fetchedAlongside: let fetchedAlongside, observer: let observer)):
                 // Return if there is no change
-                if identicalItemArrays(fetchedItems, observer.items) { return }
+                if fetchedItems == observer.items { return }
                 
                 // Ready for next check
                 observer.items = fetchedItems
@@ -1236,96 +604,10 @@ fileprivate func makeFetchFunction<Fetched, T>(
     }
 #endif
 
-fileprivate func identicalItemArrays<Fetched>(_ lhs: [AnyFetchable<Fetched>], _ rhs: [AnyFetchable<Fetched>]) -> Bool {
-    guard lhs.count == rhs.count else {
-        return false
-    }
-    for (lhs, rhs) in zip(lhs, rhs) {
-        if lhs.row != rhs.row {
-            return false
-        }
-    }
-    return true
-}
-
 
 // MARK: - UITableView Support
 
 #if os(iOS)
-    fileprivate typealias ItemComparator<Fetched> = (AnyFetchable<Fetched>, AnyFetchable<Fetched>) -> Bool
-    
-    extension RequestController where Fetched: Row {
-        // MARK: - Accessing Records
-        
-        /// Returns the object at the given index path (iOS only).
-        ///
-        /// - parameter indexPath: An index path in the fetched records.
-        ///
-        ///     If indexPath does not describe a valid index path in the fetched
-        ///     records, a fatal error is raised.
-        public subscript(_ indexPath: IndexPath) -> Fetched {
-            guard let fetchedItems = fetchedItems else {
-                // Programmer error
-                fatalError("performFetch() has not been called.")
-            }
-            return fetchedItems[indexPath.row].value
-        }
-    }
-    
-    extension RequestController where Fetched: RowConvertible {
-        // MARK: - Accessing Records
-        
-        /// Returns the object at the given index path (iOS only).
-        ///
-        /// - parameter indexPath: An index path in the fetched records.
-        ///
-        ///     If indexPath does not describe a valid index path in the fetched
-        ///     records, a fatal error is raised.
-        public subscript(_ indexPath: IndexPath) -> Fetched {
-            guard let fetchedItems = fetchedItems else {
-                // Programmer error
-                fatalError("performFetch() has not been called.")
-            }
-            return fetchedItems[indexPath.row].value
-        }
-    }
-    
-    extension RequestController where Fetched: DatabaseValueConvertible {
-        // MARK: - Accessing Records
-        
-        /// Returns the object at the given index path (iOS only).
-        ///
-        /// - parameter indexPath: An index path in the fetched records.
-        ///
-        ///     If indexPath does not describe a valid index path in the fetched
-        ///     records, a fatal error is raised.
-        public subscript(_ indexPath: IndexPath) -> Fetched {
-            guard let fetchedItems = fetchedItems else {
-                // Programmer error
-                fatalError("performFetch() has not been called.")
-            }
-            return fetchedItems[indexPath.row].value
-        }
-    }
-    
-    extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-        // MARK: - Accessing Records
-        
-        /// Returns the object at the given index path (iOS only).
-        ///
-        /// - parameter indexPath: An index path in the fetched records.
-        ///
-        ///     If indexPath does not describe a valid index path in the fetched
-        ///     records, a fatal error is raised.
-        public subscript(_ indexPath: IndexPath) -> Fetched {
-            guard let fetchedItems = fetchedItems else {
-                // Programmer error
-                fatalError("performFetch() has not been called.")
-            }
-            return fetchedItems[indexPath.row].value
-        }
-    }
-    
     extension RequestController {
         // MARK: - Querying Sections Information
         
@@ -1344,50 +626,25 @@ fileprivate func identicalItemArrays<Fetched>(_ lhs: [AnyFetchable<Fetched>], _ 
         }
     }
     
-    extension RequestController where Fetched: MutablePersistable {
+    /// A section given by a RequestController.
+    public struct FetchedRecordsSectionInfo<Fetched> {
+        let controller: RequestController<Fetched>
         
-        /// Returns the indexPath of a given record (iOS only).
-        ///
-        /// - returns: The index path of *record* in the fetched records, or nil
-        ///   if record could not be found.
-        public func indexPath(for element: Fetched) -> IndexPath? {
-            let item = AnyFetchable<Fetched>(row: Row(element.persistentDictionary))
-            guard let fetchedItems = fetchedItems, let index = fetchedItems.index(where: { elementsAreTheSame($0, item) }) else {
-                return nil
+        /// The number of records (rows) in the section.
+        public var count: Int {
+            guard let items = controller.fetchedItems else {
+                // Programmer error
+                fatalError("the performFetch() method must be called before accessing section contents")
             }
-            return IndexPath(row: index, section: 0)
+            return items.count
         }
     }
     
-    private enum TableViewChange<Fetched> {
+    enum TableViewChange<Fetched> {
         case insertion(item: AnyFetchable<Fetched>, indexPath: IndexPath)
         case deletion(item: AnyFetchable<Fetched>, indexPath: IndexPath)
         case move(item: AnyFetchable<Fetched>, indexPath: IndexPath, newIndexPath: IndexPath, changes: [String: DatabaseValue])
         case update(item: AnyFetchable<Fetched>, indexPath: IndexPath, changes: [String: DatabaseValue])
-    }
-    
-    extension TableViewChange where Fetched: Row {
-        var value: Fetched {
-            return item.value
-        }
-    }
-    
-    extension TableViewChange where Fetched: RowConvertible {
-        var value: Fetched {
-            return item.value
-        }
-    }
-    
-    extension TableViewChange where Fetched: DatabaseValueConvertible {
-        var value: Fetched {
-            return item.value
-        }
-    }
-    
-    extension TableViewChange where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-        var value: Fetched {
-            return item.value
-        }
     }
     
     extension TableViewChange {
@@ -1478,119 +735,4 @@ fileprivate func identicalItemArrays<Fetched>(_ lhs: [AnyFetchable<Fetched>], _ 
             }
         }
     }
-    
-    /// A section given by a RequestController.
-    public struct FetchedRecordsSectionInfo<Fetched> {
-        fileprivate let controller: RequestController<Fetched>
-        
-        /// The number of records (rows) in the section.
-        public var count: Int {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.count
-        }
-    }
-    
-    extension FetchedRecordsSectionInfo where Fetched: Row {
-        /// The array of records in the section.
-        public var elements: [Fetched] {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.map { $0.value }
-        }
-    }
-    
-    extension FetchedRecordsSectionInfo where Fetched: RowConvertible {
-        /// The array of records in the section.
-        public var elements: [Fetched] {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.map { $0.value }
-        }
-    }
-    
-    extension FetchedRecordsSectionInfo where Fetched: DatabaseValueConvertible {
-        /// The array of records in the section.
-        public var elements: [Fetched] {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.map { $0.value }
-        }
-    }
-    
-    extension FetchedRecordsSectionInfo where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-        /// The array of records in the section.
-        public var elements: [Fetched] {
-            guard let items = controller.fetchedItems else {
-                // Programmer error
-                fatalError("the performFetch() method must be called before accessing section contents")
-            }
-            return items.map { $0.value }
-        }
-    }
-
 #endif
-
-
-// MARK: - AnyFetchable
-
-final class AnyFetchable<Fetched> : RowConvertible {
-    let row: Row
-    var _value: Fetched?
-    
-    init(row: Row) {
-        self.row = row.copy()
-    }
-}
-
-extension AnyFetchable : Equatable {
-    static func ==<T>(lhs: AnyFetchable<T>, rhs: AnyFetchable<T>) -> Bool {
-        return lhs.row == rhs.row
-    }
-}
-
-extension AnyFetchable : Hashable {
-    var hashValue: Int {
-        return row.hashValue
-    }
-}
-
-extension AnyFetchable where Fetched: Row {
-    var value: Fetched {
-        return row as! Fetched // Row is final: this can't fail even though Swift compiler doesn't see it.
-    }
-}
-
-extension AnyFetchable where Fetched: RowConvertible {
-    var value: Fetched {
-        if let value = _value {
-            return value
-        } else {
-            let value = Fetched(row: row)
-            value.awakeFromFetch(row: row)
-            _value = value
-            return value
-        }
-    }
-}
-
-extension AnyFetchable where Fetched: DatabaseValueConvertible {
-    var value: Fetched {
-        return row.value(atIndex: 0)
-    }
-}
-
-extension AnyFetchable where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-    var value: Fetched {
-        return (row.value(atIndex: 0) as Fetched._Wrapped?) as! Fetched // Fetched is Fetched._Wrapped?: this can't fail even though Swift compiler doesn't see it.
-    }
-}
-
