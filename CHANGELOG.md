@@ -1,6 +1,12 @@
 Release Notes
 =============
 
+## Next Version
+
+**New**
+
+- `Row` adopts the Hashable protocol
+
 ## 0.98.0
 
 Released December 16, 2016
