@@ -9,14 +9,14 @@
     #endif
     
     private class ChangesRecorder<Record: RowConvertible> {
-        var changes: [(record: Record, event: TableViewEvent)] = []
+        var changes: [(record: Record, change: RequestChange)] = []
         var recordsBeforeChanges: [Record]!
-        var recordsOnFirstEvent: [Record]!
+        var recordsonFirstChange: [Record]!
         var transactionExpectation: XCTestExpectation? {
             didSet {
                 changes = []
                 recordsBeforeChanges = nil
-                recordsOnFirstEvent = nil
+                recordsonFirstChange = nil
             }
         }
         
@@ -25,11 +25,11 @@
         }
         
         /// The default implementation does nothing.
-        func controller(_ controller: RequestController<Record>, didChangeRecord record: Record, withEvent event:TableViewEvent) {
-            if recordsOnFirstEvent == nil {
-                recordsOnFirstEvent = controller.fetchedValues!
+        func controller(_ controller: RequestController<Record>, didChangeRecord record: Record, withChange change: RequestChange) {
+            if recordsonFirstChange == nil {
+                recordsonFirstChange = controller.fetchedValues!
             }
-            changes.append((record: record, event: event))
+            changes.append((record: record, change: change))
         }
         
         /// The default implementation does nothing.
@@ -141,9 +141,9 @@
                 let controller = try RequestController(dbQueue, request: Person.order(Column("id")), compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
                 // First insert
@@ -156,12 +156,12 @@
                 waitForExpectations(timeout: 1, handler: nil)
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 0)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 1)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Arthur"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 1)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Arthur"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 1)
                 XCTAssertEqual(recorder.changes[0].record.name, "Arthur")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .insertion(let indexPath):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                 default:
@@ -180,12 +180,12 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 1)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 2)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Arthur", "Barbara"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 2)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Arthur", "Barbara"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 2)
                 XCTAssertEqual(recorder.changes[0].record.name, "Barbara")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .insertion(let indexPath):
                     XCTAssertEqual(indexPath, IndexPath(row: 1, section: 0))
                 default:
@@ -201,9 +201,9 @@
                 let controller = try RequestController(dbQueue, request: Person.order(Column("id")), compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
                 // Insert
@@ -234,12 +234,12 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 2)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur", "Barbara"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 2)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Craig", "Barbara"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 2)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Craig", "Barbara"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 1)
                 XCTAssertEqual(recorder.changes[0].record.name, "Craig")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .update(let indexPath, let changes):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                     XCTAssertEqual(changes, ["name": "Arthur".databaseValue])
@@ -259,12 +259,12 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 2)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Craig", "Barbara"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 2)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Craig", "Danielle"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 2)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Craig", "Danielle"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 2)
                 XCTAssertEqual(recorder.changes[0].record.name, "Danielle")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .update(let indexPath, let changes):
                     XCTAssertEqual(indexPath, IndexPath(row: 1, section: 0))
                     XCTAssertEqual(changes, ["name": "Barbara".databaseValue])
@@ -280,9 +280,9 @@
                 let controller = try RequestController(dbQueue, request: Person.order(Column("id")), compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
                 // Insert
@@ -306,12 +306,12 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 2)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur", "Barbara"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 1)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Barbara"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 1)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Barbara"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 1)
                 XCTAssertEqual(recorder.changes[0].record.name, "Arthur")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .deletion(let indexPath):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                 default:
@@ -328,11 +328,11 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 1)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Barbara"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 0)
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 0)
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 2)
                 XCTAssertEqual(recorder.changes[0].record.name, "Barbara")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .deletion(let indexPath):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                 default:
@@ -347,9 +347,9 @@
                 let controller = try RequestController(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
                 // Insert
@@ -374,12 +374,12 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 2)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur", "Barbara"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 2)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Barbara", "Craig"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 2)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Barbara", "Craig"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 1)
                 XCTAssertEqual(recorder.changes[0].record.name, "Craig")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .move(let indexPath, let newIndexPath, let changes):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                     XCTAssertEqual(newIndexPath, IndexPath(row: 1, section: 0))
@@ -403,9 +403,9 @@
                     compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
                 // Insert
@@ -428,14 +428,14 @@
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 1)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur"])
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.bookCount! }, [1])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 1)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Arthur"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.bookCount! }, [0])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 1)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Arthur"])
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.bookCount! }, [0])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 1)
                 XCTAssertEqual(recorder.changes[0].record.name, "Arthur")
                 XCTAssertEqual(recorder.changes[0].record.bookCount, 0)
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .update(let indexPath, let changes):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                     XCTAssertEqual(changes, ["bookCount": 1.databaseValue])
@@ -451,42 +451,42 @@
                 let controller = try RequestController(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
-                enum EventTest {
+                enum ChangeTest {
                     case I(String, Int) // insert string at index
                     case M(String, Int, Int, String) // move string from index to index with changed string
                     case D(String, Int) // delete string at index
                     case U(String, Int, String) // update string at index with changed string
                     
-                    func match(name: String, event: TableViewEvent) -> Bool {
+                    func match(name: String, change: RequestChange) -> Bool {
                         switch self {
                         case .I(let s, let i):
-                            switch event {
+                            switch change {
                             case .insertion(let indexPath):
                                 return s == name && i == indexPath.row
                             default:
                                 return false
                             }
                         case .M(let s, let i, let j, let c):
-                            switch event {
+                            switch change {
                             case .move(let indexPath, let newIndexPath, let changes):
                                 return s == name && i == indexPath.row && j == newIndexPath.row && c == changes["name"]!.value()
                             default:
                                 return false
                             }
                         case .D(let s, let i):
-                            switch event {
+                            switch change {
                             case .deletion(let indexPath):
                                 return s == name && i == indexPath.row
                             default:
                                 return false
                             }
                         case .U(let s, let i, let c):
-                            switch event {
+                            switch change {
                             case .update(let indexPath, let changes):
                                 return s == name && i == indexPath.row && c == changes["name"]!.value()
                             default:
@@ -497,7 +497,7 @@
                 }
                 
                 // A list of random updates. We hope to cover most cases if not all cases here.
-                let steps: [(word: String, events: [EventTest])] = [
+                let steps: [(word: String, events: [ChangeTest])] = [
                     (word: "B", events: [.I("B",0)]),
                     (word: "BA", events: [.I("A",0)]),
                     (word: "ABF", events: [.M("B",0,1,"A"), .M("A",1,0,"B"), .I("F",2)]),
@@ -561,7 +561,7 @@
                     
                     XCTAssertEqual(recorder.changes.count, step.events.count)
                     for (change, event) in zip(recorder.changes, step.events) {
-                        XCTAssertTrue(event.match(name: change.record.name, event: change.event))
+                        XCTAssertTrue(event.match(name: change.record.name, change: change.change))
                     }
                 }
             }
@@ -584,9 +584,9 @@
                 let controller = try RequestController(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
                 let recorder = ChangesRecorder<Person>()
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 try controller.performFetch()
                 
                 // Insert
@@ -606,12 +606,12 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 2)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur", "Barbara"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 2)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Barbara", "Arthur"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 2)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Barbara", "Arthur"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 2)
                 XCTAssertEqual(recorder.changes[0].record.name, "Barbara")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .move(let indexPath, let newIndexPath, let changes):
                     XCTAssertEqual(indexPath, IndexPath(row: 1, section: 0))
                     XCTAssertEqual(newIndexPath, IndexPath(row: 0, section: 0))
@@ -627,20 +627,20 @@
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 2)
                 XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Barbara", "Arthur"])
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 1)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Craig"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 1)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Craig"])
                 XCTAssertEqual(recorder.changes.count, 2)
                 XCTAssertEqual(recorder.changes[0].record.id, 2)
                 XCTAssertEqual(recorder.changes[0].record.name, "Barbara")
                 XCTAssertEqual(recorder.changes[1].record.id, 1)
                 XCTAssertEqual(recorder.changes[1].record.name, "Craig")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .deletion(let indexPath):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                 default:
                     XCTFail()
                 }
-                switch recorder.changes[1].event {
+                switch recorder.changes[1].change {
                 case .move(let indexPath, let newIndexPath, let changes):
                     // TODO: is it really what we should expect? Wouldn't an update fit better?
                     // What does UITableView think?
@@ -670,18 +670,18 @@
                 // Set callbacks
                 recorder.transactionExpectation = expectation(description: "expectation")
                 controller.trackChanges(
-                    recordsWillChange: { recorder.controllerWillChange($0) },
-                    tableViewEvent: { (controller, record, event) in recorder.controller(controller, didChangeRecord: record, withEvent: event) },
-                    recordsDidChange: { recorder.controllerDidChange($0) })
+                    willChange: { recorder.controllerWillChange($0) },
+                    onChange: { (controller, record, change) in recorder.controller(controller, didChangeRecord: record, withChange: change) },
+                    didChange: { recorder.controllerDidChange($0) })
                 waitForExpectations(timeout: 1, handler: nil)
                 
                 XCTAssertEqual(recorder.recordsBeforeChanges.count, 0)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.count, 1)
-                XCTAssertEqual(recorder.recordsOnFirstEvent.map { $0.name }, ["Arthur"])
+                XCTAssertEqual(recorder.recordsonFirstChange.count, 1)
+                XCTAssertEqual(recorder.recordsonFirstChange.map { $0.name }, ["Arthur"])
                 XCTAssertEqual(recorder.changes.count, 1)
                 XCTAssertEqual(recorder.changes[0].record.id, 1)
                 XCTAssertEqual(recorder.changes[0].record.name, "Arthur")
-                switch recorder.changes[0].event {
+                switch recorder.changes[0].change {
                 case .insertion(let indexPath):
                     XCTAssertEqual(indexPath, IndexPath(row: 0, section: 0))
                 default:

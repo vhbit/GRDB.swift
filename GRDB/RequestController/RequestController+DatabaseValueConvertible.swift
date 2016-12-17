@@ -35,47 +35,47 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
         /// Registers changes notification callbacks (iOS only).
         ///
         /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
+        ///     - willChange: Invoked before records are updated.
+        ///     - onChange: Invoked for each record that has been added,
         ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
+        ///     - didChange: Invoked after records have been updated.
         public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
+            willChange: ((RequestController<Fetched>) -> ())? = nil,
+            onChange: ((RequestController<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            didChange: ((RequestController<Fetched>) -> ())? = nil)
         {
             trackChanges(
                 fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.map { recordsWillChange in { (controller, _) in recordsWillChange(controller) } },
-                tableViewEvent: tableViewEvent,
-                recordsDidChange: recordsDidChange.map { recordsDidChange in { (controller, _) in recordsDidChange(controller) } })
+                willChange: willChange.map { willChange in { (controller, _) in willChange(controller) } },
+                onChange: onChange,
+                didChange: didChange.map { didChange in { (controller, _) in didChange(controller) } })
         }
         
         /// Registers changes notification callbacks (iOS only).
         ///
         /// - parameters:
         ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
+        ///       willChange and didChange callbacks, as their
         ///       `fetchedAlongside` argument. The closure is guaranteed to see the
         ///       database in the state it has just after eventual changes to the
         ///       fetched records have been performed. Use it in order to fetch
         ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
+        ///     - willChange: Invoked before records are updated.
+        ///     - onChange: Invoked for each record that has been added,
         ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
+        ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
+            willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            onChange: ((RequestController<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
             // discarded because they would trigger previously set callbacks.
             observer?.invalidate()
             observer = nil
             
-            guard (recordsWillChange != nil) || (tableViewEvent != nil) || (recordsDidChange != nil) else {
+            guard (willChange != nil) || (onChange != nil) || (didChange != nil) else {
                 // Stop tracking
                 return
             }
@@ -86,14 +86,14 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
                     controller: self,
                     fetchAlongside: fetchAlongside,
                     elementsAreTheSame: elementsAreTheSame,
-                    recordsWillChange: recordsWillChange,
-                    handleChanges: tableViewEvent.map { tableViewEvent in
+                    willChange: willChange,
+                    handleChanges: onChange.map { onChange in
                         { (controller, changes) in
                             for change in changes {
-                                tableViewEvent(controller, change.value, change.event)
+                                onChange(controller, change.value, change.change)
                             }
                         }
-                }, recordsDidChange: recordsDidChange)
+                }, didChange: didChange)
                 let observer = RequestObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
                 self.observer = observer
                 if let initialItems = initialItems {
@@ -128,47 +128,47 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
         /// Registers changes notification callbacks (iOS only).
         ///
         /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
+        ///     - willChange: Invoked before records are updated.
+        ///     - onChange: Invoked for each record that has been added,
         ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
+        ///     - didChange: Invoked after records have been updated.
         public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
+            willChange: ((RequestController<Fetched>) -> ())? = nil,
+            onChange: ((RequestController<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            didChange: ((RequestController<Fetched>) -> ())? = nil)
         {
             trackChanges(
                 fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.map { recordsWillChange in { (controller, _) in recordsWillChange(controller) } },
-                tableViewEvent: tableViewEvent,
-                recordsDidChange: recordsDidChange.map { recordsDidChange in { (controller, _) in recordsDidChange(controller) } })
+                willChange: willChange.map { willChange in { (controller, _) in willChange(controller) } },
+                onChange: onChange,
+                didChange: didChange.map { didChange in { (controller, _) in didChange(controller) } })
         }
         
         /// Registers changes notification callbacks (iOS only).
         ///
         /// - parameters:
         ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
+        ///       willChange and didChange callbacks, as their
         ///       `fetchedAlongside` argument. The closure is guaranteed to see the
         ///       database in the state it has just after eventual changes to the
         ///       fetched records have been performed. Use it in order to fetch
         ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - tableViewEvent: Invoked for each record that has been added,
+        ///     - willChange: Invoked before records are updated.
+        ///     - onChange: Invoked for each record that has been added,
         ///       removed, moved, or updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
+        ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            tableViewEvent: ((RequestController<Fetched>, Fetched, TableViewEvent) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
+            willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            onChange: ((RequestController<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
             // discarded because they would trigger previously set callbacks.
             observer?.invalidate()
             observer = nil
             
-            guard (recordsWillChange != nil) || (tableViewEvent != nil) || (recordsDidChange != nil) else {
+            guard (willChange != nil) || (onChange != nil) || (didChange != nil) else {
                 // Stop tracking
                 return
             }
@@ -179,14 +179,14 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
                     controller: self,
                     fetchAlongside: fetchAlongside,
                     elementsAreTheSame: elementsAreTheSame,
-                    recordsWillChange: recordsWillChange,
-                    handleChanges: tableViewEvent.map { tableViewEvent in
+                    willChange: willChange,
+                    handleChanges: onChange.map { onChange in
                         { (controller, changes) in
                             for change in changes {
-                                tableViewEvent(controller, change.value, change.event)
+                                onChange(controller, change.value, change.change)
                             }
                         }
-                }, recordsDidChange: recordsDidChange)
+                }, didChange: didChange)
                 let observer = RequestObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
                 self.observer = observer
                 if let initialItems = initialItems {
@@ -238,11 +238,11 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
         }
     }
     
-    extension TableViewChange where Fetched: DatabaseValueConvertible {
+    extension AnyFetchableChange where Fetched: DatabaseValueConvertible {
         var value: Fetched { return item.value }
     }
     
-    extension TableViewChange where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
+    extension AnyFetchableChange where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
         var value: Fetched { return item.value }
     }
 #endif

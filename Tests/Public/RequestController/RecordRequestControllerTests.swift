@@ -191,8 +191,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             try controller.performFetch()
             
             // First insert
@@ -231,8 +231,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             try controller.performFetch()
             
             // Insert
@@ -289,8 +289,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let controller = try RequestController(dbQueue, request: Person.order(Column("id")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             try controller.performFetch()
             
             // Insert
@@ -337,8 +337,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let controller = try RequestController(dbQueue, request: Person.order(Column("name")))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             try controller.performFetch()
             
             // Insert
@@ -380,8 +380,8 @@ class RecordRequestControllerTests: GRDBTestCase {
                     "ORDER BY persons.name"))
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             try controller.performFetch()
             
             // Insert
@@ -428,8 +428,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let controller = try RequestController(dbQueue, request: request)
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             try controller.performFetch()
             
             // Insert
@@ -515,8 +515,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             // Set callbacks
             recorder.transactionExpectation = expectation(description: "expectation")
             controller.trackChanges(
-                recordsWillChange: { recorder.controllerWillChange($0) },
-                recordsDidChange: { recorder.controllerDidChange($0) })
+                willChange: { recorder.controllerWillChange($0) },
+                didChange: { recorder.controllerDidChange($0) })
             waitForExpectations(timeout: 1, handler: nil)
             
             XCTAssertEqual(recorder.recordsBeforeChanges.count, 0)
@@ -554,8 +554,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let recorder = ChangesRecorder<Person>()
             controller.trackChanges(
                 fetchAlongside: { db in try Person.fetchCount(db) },
-                recordsWillChange: { (controller, count) in recorder.controllerWillChange(controller, count: count) },
-                recordsDidChange: { (controller, count) in recorder.controllerDidChange(controller, count: count) })
+                willChange: { (controller, count) in recorder.controllerWillChange(controller, count: count) },
+                didChange: { (controller, count) in recorder.controllerDidChange(controller, count: count) })
             try controller.performFetch()
             
             // First insert

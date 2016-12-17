@@ -268,47 +268,47 @@ public final class RequestController<Fetched> {
         /// Registers changes notification callbacks.
         ///
         /// - parameters:
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
+        ///     - willChange: Invoked before records are updated.
+        ///     - didChange: Invoked after records have been updated.
         public func trackChanges(
-            recordsWillChange: ((RequestController<Fetched>) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>) -> ())? = nil)
+            willChange: ((RequestController<Fetched>) -> ())? = nil,
+            didChange: ((RequestController<Fetched>) -> ())? = nil)
         {
             trackChanges(
                 fetchAlongside: { _ in },
-                recordsWillChange: recordsWillChange.flatMap { callback in { (controller, _) in callback(controller) } },
-                recordsDidChange: recordsDidChange.flatMap { callback in { (controller, _) in callback(controller) } })
+                willChange: willChange.flatMap { callback in { (controller, _) in callback(controller) } },
+                didChange: didChange.flatMap { callback in { (controller, _) in callback(controller) } })
         }
         
         /// Registers changes notification callbacks.
         ///
         /// - parameters:
         ///     - fetchAlongside: The value returned from this closure is given to
-        ///       recordsWillChange and recordsDidChange callbacks, as their
+        ///       willChange and didChange callbacks, as their
         ///       `fetchedAlongside` argument. The closure is guaranteed to see the
         ///       database in the state it has just after eventual changes to the
         ///       fetched records have been performed. Use it in order to fetch
         ///       values that must be consistent with the fetched records.
-        ///     - recordsWillChange: Invoked before records are updated.
-        ///     - recordsDidChange: Invoked after records have been updated.
+        ///     - willChange: Invoked before records are updated.
+        ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
+            willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
             // discarded because they would trigger previously set callbacks.
             observer?.invalidate()
             observer = nil
             
-            guard (recordsWillChange != nil) || (recordsDidChange != nil) else {
+            guard (willChange != nil) || (didChange != nil) else {
                 // Stop tracking
                 return
             }
             
             let initialItems = fetchedItems
             databaseWriter.write { db in
-                let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(controller: self, fetchAlongside: fetchAlongside, recordsWillChange: recordsWillChange, recordsDidChange: recordsDidChange)
+                let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(controller: self, fetchAlongside: fetchAlongside, willChange: willChange, didChange: didChange)
                 let observer = RequestObserver(selectionInfo: request.selectionInfo, fetchAndNotifyChanges: fetchAndNotifyChanges)
                 self.observer = observer
                 if let initialItems = initialItems {
@@ -417,9 +417,9 @@ fileprivate func makeFetchFunction<Fetched, T>(
         controller: RequestController<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
         elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>,
-        recordsWillChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
-        handleChanges: ((_ controller: RequestController<Fetched>, _ changes: [TableViewChange<Fetched>]) -> ())?,
-        recordsDidChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
+        willChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
+        handleChanges: ((_ controller: RequestController<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
+        didChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
         // Make sure we keep a weak reference to the fetched records controller,
@@ -443,10 +443,10 @@ fileprivate func makeFetchFunction<Fetched, T>(
                 
             case .success((fetchedItems: let fetchedItems, fetchedAlongside: let fetchedAlongside, observer: let observer)):
                 // Return if there is no change
-                let tableViewChanges: [TableViewChange<Fetched>]
+                let tableViewChanges: [AnyFetchableChange<Fetched>]
                 if handleChanges != nil {
                     // Compute table view changes
-                    tableViewChanges = computeTableViewChanges(from: observer.items, to: fetchedItems, elementsAreTheSame: elementsAreTheSame)
+                    tableViewChanges = computeChanges(from: observer.items, to: fetchedItems, elementsAreTheSame: elementsAreTheSame)
                     if tableViewChanges.isEmpty { return }
                 } else {
                     // Don't compute changes: just look for a row difference:
@@ -466,33 +466,33 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     guard let strongController = controller else { return }
                     
                     // Notify changes
-                    recordsWillChange?(strongController, fetchedAlongside)
+                    willChange?(strongController, fetchedAlongside)
                     strongController.fetchedItems = fetchedItems
                     handleChanges?(strongController, tableViewChanges)
-                    recordsDidChange?(strongController, fetchedAlongside)
+                    didChange?(strongController, fetchedAlongside)
                 }
             }
         }
     }
     
-    fileprivate func computeTableViewChanges<Fetched>(from s: [AnyFetchable<Fetched>], to t: [AnyFetchable<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [TableViewChange<Fetched>] {
+    fileprivate func computeChanges<Fetched>(from s: [AnyFetchable<Fetched>], to t: [AnyFetchable<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [AnyFetchableChange<Fetched>] {
         let m = s.count
         let n = t.count
         
         // Fill first row and column of insertions and deletions.
         
-        var d: [[[TableViewChange<Fetched>]]] = Array(repeating: Array(repeating: [], count: n + 1), count: m + 1)
+        var d: [[[AnyFetchableChange<Fetched>]]] = Array(repeating: Array(repeating: [], count: n + 1), count: m + 1)
         
-        var changes = [TableViewChange<Fetched>]()
+        var changes = [AnyFetchableChange<Fetched>]()
         for (row, item) in s.enumerated() {
-            let deletion = TableViewChange.deletion(item: item, indexPath: IndexPath(row: row, section: 0))
+            let deletion = AnyFetchableChange.deletion(item: item, indexPath: IndexPath(row: row, section: 0))
             changes.append(deletion)
             d[row + 1][0] = changes
         }
         
         changes.removeAll()
         for (col, item) in t.enumerated() {
-            let insertion = TableViewChange.insertion(item: item, indexPath: IndexPath(row: col, section: 0))
+            let insertion = AnyFetchableChange.insertion(item: item, indexPath: IndexPath(row: col, section: 0))
             changes.append(insertion)
             d[0][col + 1] = changes
         }
@@ -515,16 +515,16 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     // Record operation.
                     let minimumCount = min(del.count, ins.count, sub.count)
                     if del.count == minimumCount {
-                        let deletion = TableViewChange.deletion(item: s[sx], indexPath: IndexPath(row: sx, section: 0))
+                        let deletion = AnyFetchableChange.deletion(item: s[sx], indexPath: IndexPath(row: sx, section: 0))
                         del.append(deletion)
                         d[sx+1][tx+1] = del
                     } else if ins.count == minimumCount {
-                        let insertion = TableViewChange.insertion(item: t[tx], indexPath: IndexPath(row: tx, section: 0))
+                        let insertion = AnyFetchableChange.insertion(item: t[tx], indexPath: IndexPath(row: tx, section: 0))
                         ins.append(insertion)
                         d[sx+1][tx+1] = ins
                     } else {
-                        let deletion = TableViewChange.deletion(item: s[sx], indexPath: IndexPath(row: sx, section: 0))
-                        let insertion = TableViewChange.insertion(item: t[tx], indexPath: IndexPath(row: tx, section: 0))
+                        let deletion = AnyFetchableChange.deletion(item: s[sx], indexPath: IndexPath(row: sx, section: 0))
+                        let insertion = AnyFetchableChange.insertion(item: t[tx], indexPath: IndexPath(row: tx, section: 0))
                         sub.append(deletion)
                         sub.append(insertion)
                         d[sx+1][tx+1] = sub
@@ -534,13 +534,13 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
         
         /// Returns an array where deletion/insertion pairs of the same element are replaced by `.move` change.
-        func standardize(changes: [TableViewChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [TableViewChange<Fetched>] {
+        func standardize(changes: [AnyFetchableChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [AnyFetchableChange<Fetched>] {
             
             /// Returns a potential .move or .update if *change* has a matching change in *changes*:
             /// If *change* is a deletion or an insertion, and there is a matching inverse
             /// insertion/deletion with the same value in *changes*, a corresponding .move or .update is returned.
             /// As a convenience, the index of the matched change is returned as well.
-            func merge(change: TableViewChange<Fetched>, in changes: [TableViewChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> (mergedChange: TableViewChange<Fetched>, mergedIndex: Int)? {
+            func merge(change: AnyFetchableChange<Fetched>, in changes: [AnyFetchableChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> (mergedChange: AnyFetchableChange<Fetched>, mergedIndex: Int)? {
                 
                 /// Returns the changes between two rows: a dictionary [key: oldValue]
                 /// Precondition: both rows have the same columns
@@ -563,9 +563,9 @@ fileprivate func makeFetchFunction<Fetched, T>(
                         guard elementsAreTheSame(oldItem, newItem) else { continue }
                         let rowChanges = changedValues(from: oldItem.row, to: newItem.row)
                         if oldIndexPath == newIndexPath {
-                            return (TableViewChange.update(item: newItem, indexPath: oldIndexPath, changes: rowChanges), index)
+                            return (AnyFetchableChange.update(item: newItem, indexPath: oldIndexPath, changes: rowChanges), index)
                         } else {
-                            return (TableViewChange.move(item: newItem, indexPath: oldIndexPath, newIndexPath: newIndexPath, changes: rowChanges), index)
+                            return (AnyFetchableChange.move(item: newItem, indexPath: oldIndexPath, newIndexPath: newIndexPath, changes: rowChanges), index)
                         }
                     }
                     return nil
@@ -577,9 +577,9 @@ fileprivate func makeFetchFunction<Fetched, T>(
                         guard elementsAreTheSame(oldItem, newItem) else { continue }
                         let rowChanges = changedValues(from: oldItem.row, to: newItem.row)
                         if oldIndexPath == newIndexPath {
-                            return (TableViewChange.update(item: newItem, indexPath: oldIndexPath, changes: rowChanges), index)
+                            return (AnyFetchableChange.update(item: newItem, indexPath: oldIndexPath, changes: rowChanges), index)
                         } else {
-                            return (TableViewChange.move(item: newItem, indexPath: oldIndexPath, newIndexPath: newIndexPath, changes: rowChanges), index)
+                            return (AnyFetchableChange.move(item: newItem, indexPath: oldIndexPath, newIndexPath: newIndexPath, changes: rowChanges), index)
                         }
                     }
                     return nil
@@ -590,8 +590,8 @@ fileprivate func makeFetchFunction<Fetched, T>(
             }
             
             // Updates must be pushed at the end
-            var mergedChanges: [TableViewChange<Fetched>] = []
-            var updateChanges: [TableViewChange<Fetched>] = []
+            var mergedChanges: [AnyFetchableChange<Fetched>] = []
+            var updateChanges: [AnyFetchableChange<Fetched>] = []
             for change in changes {
                 if let (mergedChange, mergedIndex) = merge(change: change, in: mergedChanges, elementsAreTheSame: elementsAreTheSame) {
                     mergedChanges.remove(at: mergedIndex)
@@ -617,8 +617,8 @@ fileprivate func makeFetchFunction<Fetched, T>(
     func makeFetchAndNotifyChangesFunction<Fetched, T>(
         controller: RequestController<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
-        recordsWillChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
-        recordsDidChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
+        willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
+        didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
         // Make sure we keep a weak reference to the fetched records controller,
@@ -656,9 +656,9 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     guard let strongController = controller else { return }
                     
                     // Notify changes
-                    recordsWillChange?(strongController, fetchedAlongside)
+                    willChange?(strongController, fetchedAlongside)
                     strongController.fetchedItems = fetchedItems
-                    recordsDidChange?(strongController, fetchedAlongside)
+                    didChange?(strongController, fetchedAlongside)
                 }
             }
         }
@@ -701,14 +701,14 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
     }
     
-    enum TableViewChange<Fetched> {
+    enum AnyFetchableChange<Fetched> {
         case insertion(item: AnyFetchable<Fetched>, indexPath: IndexPath)
         case deletion(item: AnyFetchable<Fetched>, indexPath: IndexPath)
         case move(item: AnyFetchable<Fetched>, indexPath: IndexPath, newIndexPath: IndexPath, changes: [String: DatabaseValue])
         case update(item: AnyFetchable<Fetched>, indexPath: IndexPath, changes: [String: DatabaseValue])
     }
     
-    extension TableViewChange {
+    extension AnyFetchableChange {
         var item: AnyFetchable<Fetched> {
             switch self {
             case .insertion(item: let item, indexPath: _):
@@ -722,7 +722,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
             }
         }
         
-        var event: TableViewEvent {
+        var change: RequestChange {
             switch self {
             case .insertion(item: _, indexPath: let indexPath):
                 return .insertion(indexPath: indexPath)
@@ -736,7 +736,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
     }
     
-    extension TableViewChange: CustomStringConvertible {
+    extension AnyFetchableChange: CustomStringConvertible {
         var description: String {
             switch self {
             case .insertion(let item, let indexPath):
@@ -758,7 +758,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
     ///
     /// The move and update events hold a *changes* dictionary. Its keys are column
     /// names, and values the old values that have been changed.
-    public enum TableViewEvent {
+    public enum RequestChange {
         
         /// An insertion event, at given indexPath.
         case insertion(indexPath: IndexPath)
@@ -777,7 +777,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         case update(indexPath: IndexPath, changes: [String: DatabaseValue])
     }
     
-    extension TableViewEvent: CustomStringConvertible {
+    extension RequestChange: CustomStringConvertible {
         
         /// A textual representation of `self`.
         public var description: String {

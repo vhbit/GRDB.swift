@@ -662,15 +662,15 @@ class PrimaryKeyHiddenRowIDTests : GRDBTestCase {
                 controller = try RequestController(dbQueue, request: Person.all(), compareRecordsByPrimaryKey: true)
                 var update = false
                 controller.trackChanges(
-                    tableViewEvent: { (_, _, event) in
-                        switch event {
+                    onChange: { (_, _, change) in
+                        switch change {
                         case .update:
                             update = true
                         default:
                             break
                         }
                     },
-                    recordsDidChange: { _ in
+                    didChange: { _ in
                         expectation.fulfill()
                 })
             #else

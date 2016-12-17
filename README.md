@@ -4284,20 +4284,20 @@ let controller = try FetchedRecordsController(...)
 
 controller.trackChanges(
     // controller's records are about to change:
-    recordsWillChange: { controller in ... },
+    willChange: { controller in ... },
     
     // (iOS only) notification of individual record changes:
-    tableViewEvent: { (controller, record, event) in ... },
+    onChange: { (controller, record, change) in ... },
     
     // controller's records have changed:
-    recordsDidChange: { controller in ... })
+    didChange: { controller in ... })
 
 try controller.performFetch()
 ```
 
 See [Implementing Table View Updates](#implementing-table-view-updates) for more detail on table view updates on iOS.
 
-**All callbacks are optional.** When you only need to grab the latest results, you can omit the `recordsDidChange` argument name:
+**All callbacks are optional.** When you only need to grab the latest results, you can omit the `didChange` argument name:
 
 ```swift
 controller.trackChanges { controller in
@@ -4331,7 +4331,7 @@ controller.trackChanges(
         // Fetch any extra value, for example the number of fetched records:
         return try Person.fetchCount(db)
     },
-    recordsDidChange: { (controller, count) in
+    didChange: { (controller, count) in
         // The extra value is the second argument.
         let recordsCount = controller.fetchedRecords!.count
         assert(count == recordsCount) // guaranteed
@@ -4427,7 +4427,7 @@ Yet, FetchedRecordsController can notify that the controller’s fetched records
 
 ##### Typical Table View Updates
 
-For animated table view updates, use the `recordsWillChange` and `recordsDidChange` callbacks to bracket events provided by the fetched records controller, as illustrated in the following example:
+For animated table view updates, use the `willChange` and `didChange` callbacks to bracket events provided by the fetched records controller, as illustrated in the following example:
 
 ```swift
 // Assume self has a tableView property, and a cell configuration
@@ -4435,13 +4435,13 @@ For animated table view updates, use the `recordsWillChange` and `recordsDidChan
 
 controller.trackChanges(
     // controller's records are about to change:
-    recordsWillChange: { [unowned self] _ in
+    willChange: { [unowned self] _ in
         self.tableView.beginUpdates()
     },
     
     // notification of individual record changes:
-    tableViewEvent: { [unowned self] (controller, record, event) in
-        switch event {
+    onChange: { [unowned self] (controller, record, change) in
+        switch change {
         case .insertion(let indexPath):
             self.tableView.insertRows(at: [indexPath], with: .fade)
             
@@ -4467,7 +4467,7 @@ controller.trackChanges(
     },
     
     // controller's records have changed:
-    recordsDidChange: { [unowned self] _ in
+    didChange: { [unowned self] _ in
         self.tableView.endUpdates()
     })
 ```
