@@ -87,7 +87,7 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
                     fetchAlongside: fetchAlongside,
                     elementsAreTheSame: elementsAreTheSame,
                     willChange: willChange,
-                    handleChanges: onChange.map { onChange in
+                    onChanges: onChange.map { onChange in
                         { (controller, changes) in
                             for change in changes {
                                 onChange(controller, change.value, change.change)
@@ -180,7 +180,7 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
                     fetchAlongside: fetchAlongside,
                     elementsAreTheSame: elementsAreTheSame,
                     willChange: willChange,
-                    handleChanges: onChange.map { onChange in
+                    onChanges: onChange.map { onChange in
                         { (controller, changes) in
                             for change in changes {
                                 onChange(controller, change.value, change.change)

@@ -154,7 +154,7 @@ extension RequestController where Fetched: RowConvertible {
                     fetchAlongside: fetchAlongside,
                     elementsAreTheSame: elementsAreTheSame,
                     willChange: willChange,
-                    handleChanges: onChange.map { onChange in
+                    onChanges: onChange.map { onChange in
                         { (controller, changes) in
                             for change in changes {
                                 onChange(controller, change.value, change.change)

@@ -418,7 +418,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         fetchAlongside: @escaping (Database) throws -> T,
         elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>,
         willChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
-        handleChanges: ((_ controller: RequestController<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
+        onChanges: ((_ controller: RequestController<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
         didChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
@@ -444,7 +444,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
             case .success((fetchedItems: let fetchedItems, fetchedAlongside: let fetchedAlongside, observer: let observer)):
                 // Return if there is no change
                 let tableViewChanges: [AnyFetchableChange<Fetched>]
-                if handleChanges != nil {
+                if onChanges != nil {
                     // Compute table view changes
                     tableViewChanges = computeChanges(from: observer.items, to: fetchedItems, elementsAreTheSame: elementsAreTheSame)
                     if tableViewChanges.isEmpty { return }
@@ -468,7 +468,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     // Notify changes
                     willChange?(strongController, fetchedAlongside)
                     strongController.fetchedItems = fetchedItems
-                    handleChanges?(strongController, tableViewChanges)
+                    onChanges?(strongController, tableViewChanges)
                     didChange?(strongController, fetchedAlongside)
                 }
             }
