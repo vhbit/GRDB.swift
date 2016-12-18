@@ -125,7 +125,7 @@ extension RequestController where Fetched: DatabaseValueConvertible {
     ///         from this queue.
     ///
     ///         This dispatch queue must be serial.
-    public init<Request>(
+    public convenience init<Request>(
         _ databaseWriter: DatabaseWriter,
         request: Request,
         queue: DispatchQueue = .main) throws
@@ -267,7 +267,7 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
     ///         from this queue.
     ///
     ///         This dispatch queue must be serial.
-    public init<Request>(
+    public convenience init<Request>(
         _ databaseWriter: DatabaseWriter,
         request: Request,
         queue: DispatchQueue = .main) throws

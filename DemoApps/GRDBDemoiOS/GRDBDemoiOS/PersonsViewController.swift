@@ -2,7 +2,7 @@ import UIKit
 import GRDB
 
 class PersonsViewController: UITableViewController {
-    var personsController: FetchedRecordsController<Person>!
+    var persons: RequestController<Person>!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -13,12 +13,12 @@ class PersonsViewController: UITableViewController {
         ]
         
         let request = personsSortedByScore
-        personsController = try! FetchedRecordsController(dbQueue, request: request, compareRecordsByPrimaryKey: true)
-        personsController.trackChanges(
+        persons = try! RequestController(dbQueue, request: request, compareRecordsByPrimaryKey: true)
+        persons.trackChanges(
             willChange: { [unowned self] _ in
                 self.tableView.beginUpdates()
             },
-            onChange: { [unowned self] (controller, record, change) in
+            onChange: { [unowned self] (controller, person, change) in
                 switch change {
                 case .insertion(let indexPath):
                     self.tableView.insertRows(at: [indexPath], with: .fade)
@@ -47,7 +47,7 @@ class PersonsViewController: UITableViewController {
             didChange: { [unowned self] _ in
                 self.tableView.endUpdates()
             })
-        try! personsController.performFetch()
+        try! persons.performFetch()
         
         configureToolbar()
     }
@@ -65,7 +65,7 @@ extension PersonsViewController : PersonEditionViewControllerDelegate {
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "EditPerson" {
-            let person = personsController.record(at: tableView.indexPathForSelectedRow!)
+            let person = persons[tableView.indexPathForSelectedRow!]
             let controller = segue.destination as! PersonEditionViewController
             controller.title = person.name
             controller.person = person
@@ -119,17 +119,17 @@ extension PersonsViewController : PersonEditionViewControllerDelegate {
 
 extension PersonsViewController {
     func configure(_ cell: UITableViewCell, at indexPath: IndexPath) {
-        let person = personsController.record(at: indexPath)
+        let person = persons[indexPath]
         cell.textLabel?.text = person.name
         cell.detailTextLabel?.text = abs(person.score) > 1 ? "\(person.score) points" : "0 point"
     }
     
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return personsController.sections.count
+        return persons.sections.count
     }
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return personsController.sections[section].numberOfRecords
+        return persons.sections[section].count
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -140,7 +140,7 @@ extension PersonsViewController {
     
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCellEditingStyle, forRowAt indexPath: IndexPath) {
         // Delete the person
-        let person = personsController.record(at: indexPath)
+        let person = persons[indexPath]
         try! dbQueue.inDatabase { db in
             _ = try person.delete(db)
         }
@@ -164,12 +164,12 @@ extension PersonsViewController {
     
     @IBAction func sortByName() {
         setEditing(false, animated: true)
-        try! personsController.setRequest(personsSortedByName)
+        try! persons.setRequest(personsSortedByName)
     }
     
     @IBAction func sortByScore() {
         setEditing(false, animated: true)
-        try! personsController.setRequest(personsSortedByScore)
+        try! persons.setRequest(personsSortedByScore)
     }
     
     @IBAction func randomizeScores() {
