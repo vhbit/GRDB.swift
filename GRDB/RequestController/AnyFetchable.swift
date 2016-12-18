@@ -1,4 +1,6 @@
 final class AnyFetchable<Fetched> : RowConvertible {
+    typealias Comparator = (AnyFetchable<Fetched>, AnyFetchable<Fetched>) -> Bool
+    
     let row: Row
     fileprivate var _value: Fetched? // cache only used when Fetched adopts RowConvertible
     
@@ -43,5 +45,3 @@ extension AnyFetchable where Fetched: _OptionalFetchable, Fetched._Wrapped: Data
         return (row.value(atIndex: 0) as Fetched._Wrapped?) as! Fetched // Fetched is Fetched._Wrapped?: this can't fail even though Swift compiler doesn't see it.
     }
 }
-
-typealias AnyFetchableComparator<Fetched> = (AnyFetchable<Fetched>, AnyFetchable<Fetched>) -> Bool

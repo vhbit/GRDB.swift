@@ -41,7 +41,7 @@
                 request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
                 queue: queue,
                 unwrap: { $0.unwrap() },
-                elementsAreTheSame: isSameElement.map { isSameElement in { isSameElement($0.unwrap(), $1.unwrap()) } } ?? { _ in false })
+                itemsAreIdentical: isSameElement.map { isSameElement in { isSameElement($0.unwrap(), $1.unwrap()) } } ?? { _ in false })
         }
         
         /// Creates a fetched records controller initialized from a fetch request
@@ -80,7 +80,7 @@
                 request: request,
                 queue: queue,
                 unwrap: { $0.unwrap() },
-                elementsAreTheSame: isSameElement.map { isSameElement in { isSameElement($0.unwrap(), $1.unwrap()) } } ?? { _ in false })
+                itemsAreIdentical: isSameElement.map { isSameElement in { isSameElement($0.unwrap(), $1.unwrap()) } } ?? { _ in false })
         }
         
         /// Returns the indexPath of a given record (iOS only).

@@ -38,7 +38,7 @@ extension RequestController where Fetched: DatabaseValueConvertible {
             request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
             queue: queue,
             unwrap: { $0.unwrap() },
-            elementsAreTheSame: { _ in false })
+            itemsAreIdentical: { _ in false })
     }
     
     /// Creates a fetched records controller initialized from a fetch request
@@ -70,7 +70,7 @@ extension RequestController where Fetched: DatabaseValueConvertible {
             request: request,
             queue: queue,
             unwrap: { $0.unwrap() },
-            elementsAreTheSame: { _ in false })
+            itemsAreIdentical: { _ in false })
     }
     #else
     /// Creates a fetched records controller initialized from a SQL query and
@@ -180,7 +180,7 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
             request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
             queue: queue,
             unwrap: { $0.unwrap() },
-            elementsAreTheSame: { _ in false })
+            itemsAreIdentical: { _ in false })
     }
     
     /// Creates a fetched records controller initialized from a fetch request
@@ -212,7 +212,7 @@ extension RequestController where Fetched: _OptionalFetchable, Fetched._Wrapped:
             request: request,
             queue: queue,
             unwrap: { $0.unwrap() },
-            elementsAreTheSame: { _ in false })
+            itemsAreIdentical: { _ in false })
     }
     #else
     /// Creates a fetched records controller initialized from a SQL query and

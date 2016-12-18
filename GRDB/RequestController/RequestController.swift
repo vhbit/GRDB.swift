@@ -12,8 +12,8 @@ public final class RequestController<Fetched> {
     let unwrap: (AnyFetchable<Fetched>) -> Fetched
     
     #if os(iOS)
-    // The value comparator
-    var elementsAreTheSame: AnyFetchableComparator<Fetched>
+    // The item comparator
+    var itemsAreIdentical: AnyFetchable<Fetched>.Comparator
     #endif
     
     // The request
@@ -33,14 +33,14 @@ public final class RequestController<Fetched> {
         request: Request,
         queue: DispatchQueue,
         unwrap: @escaping (AnyFetchable<Fetched>) -> Fetched,
-        elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>) throws
+        itemsAreIdentical: @escaping AnyFetchable<Fetched>.Comparator) throws
         where Request: TypedRequest, Request.Fetched == Fetched
     {
         self.databaseWriter = databaseWriter
         self.request = try databaseWriter.read { db in try ObservedRequest(db, request: request) }
         self.queue = queue
         self.unwrap = unwrap
-        self.elementsAreTheSame = elementsAreTheSame
+        self.itemsAreIdentical = itemsAreIdentical
     }
     #else
     init<Request>(
@@ -204,7 +204,7 @@ public final class RequestController<Fetched> {
                 let fetchAndNotifyChanges = makeFetchAndNotifyChangesFunction(
                     controller: self,
                     fetchAlongside: fetchAlongside,
-                    elementsAreTheSame: elementsAreTheSame,
+                    itemsAreIdentical: itemsAreIdentical,
                     willChange: willChange,
                     onChanges: onChange.map { onChange in
                         { (controller, changes) in
@@ -448,7 +448,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
     func makeFetchAndNotifyChangesFunction<Fetched, T>(
         controller: RequestController<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
-        elementsAreTheSame: @escaping AnyFetchableComparator<Fetched>,
+        itemsAreIdentical: @escaping AnyFetchable<Fetched>.Comparator,
         willChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
         onChanges: ((_ controller: RequestController<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
         didChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
@@ -478,7 +478,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                 let tableViewChanges: [AnyFetchableChange<Fetched>]
                 if onChanges != nil {
                     // Compute table view changes
-                    tableViewChanges = computeChanges(from: observer.items, to: fetchedItems, elementsAreTheSame: elementsAreTheSame)
+                    tableViewChanges = computeChanges(from: observer.items, to: fetchedItems, itemsAreIdentical: itemsAreIdentical)
                     if tableViewChanges.isEmpty { return }
                 } else {
                     // Don't compute changes: just look for a row difference:
@@ -507,7 +507,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
     }
     
-    fileprivate func computeChanges<Fetched>(from s: [AnyFetchable<Fetched>], to t: [AnyFetchable<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [AnyFetchableChange<Fetched>] {
+    fileprivate func computeChanges<Fetched>(from s: [AnyFetchable<Fetched>], to t: [AnyFetchable<Fetched>], itemsAreIdentical: AnyFetchable<Fetched>.Comparator) -> [AnyFetchableChange<Fetched>] {
         let m = s.count
         let n = t.count
         
@@ -566,13 +566,13 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
         
         /// Returns an array where deletion/insertion pairs of the same element are replaced by `.move` change.
-        func standardize(changes: [AnyFetchableChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> [AnyFetchableChange<Fetched>] {
+        func standardize(changes: [AnyFetchableChange<Fetched>], itemsAreIdentical: AnyFetchable<Fetched>.Comparator) -> [AnyFetchableChange<Fetched>] {
             
             /// Returns a potential .move or .update if *change* has a matching change in *changes*:
             /// If *change* is a deletion or an insertion, and there is a matching inverse
             /// insertion/deletion with the same value in *changes*, a corresponding .move or .update is returned.
             /// As a convenience, the index of the matched change is returned as well.
-            func merge(change: AnyFetchableChange<Fetched>, in changes: [AnyFetchableChange<Fetched>], elementsAreTheSame: AnyFetchableComparator<Fetched>) -> (mergedChange: AnyFetchableChange<Fetched>, mergedIndex: Int)? {
+            func merge(change: AnyFetchableChange<Fetched>, in changes: [AnyFetchableChange<Fetched>], itemsAreIdentical: AnyFetchable<Fetched>.Comparator) -> (mergedChange: AnyFetchableChange<Fetched>, mergedIndex: Int)? {
                 
                 /// Returns the changes between two rows: a dictionary [key: oldValue]
                 /// Precondition: both rows have the same columns
@@ -592,7 +592,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     // Look for a matching deletion
                     for (index, otherChange) in changes.enumerated() {
                         guard case .deletion(let oldItem, let oldIndexPath) = otherChange else { continue }
-                        guard elementsAreTheSame(oldItem, newItem) else { continue }
+                        guard itemsAreIdentical(oldItem, newItem) else { continue }
                         let rowChanges = changedValues(from: oldItem.row, to: newItem.row)
                         if oldIndexPath == newIndexPath {
                             return (AnyFetchableChange.update(item: newItem, indexPath: oldIndexPath, changes: rowChanges), index)
@@ -606,7 +606,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     // Look for a matching insertion
                     for (index, otherChange) in changes.enumerated() {
                         guard case .insertion(let newItem, let newIndexPath) = otherChange else { continue }
-                        guard elementsAreTheSame(oldItem, newItem) else { continue }
+                        guard itemsAreIdentical(oldItem, newItem) else { continue }
                         let rowChanges = changedValues(from: oldItem.row, to: newItem.row)
                         if oldIndexPath == newIndexPath {
                             return (AnyFetchableChange.update(item: newItem, indexPath: oldIndexPath, changes: rowChanges), index)
@@ -625,7 +625,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
             var mergedChanges: [AnyFetchableChange<Fetched>] = []
             var updateChanges: [AnyFetchableChange<Fetched>] = []
             for change in changes {
-                if let (mergedChange, mergedIndex) = merge(change: change, in: mergedChanges, elementsAreTheSame: elementsAreTheSame) {
+                if let (mergedChange, mergedIndex) = merge(change: change, in: mergedChanges, itemsAreIdentical: itemsAreIdentical) {
                     mergedChanges.remove(at: mergedIndex)
                     switch mergedChange {
                     case .update:
@@ -640,7 +640,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
             return mergedChanges + updateChanges
         }
         
-        return standardize(changes: d[m][n], elementsAreTheSame: elementsAreTheSame)
+        return standardize(changes: d[m][n], itemsAreIdentical: itemsAreIdentical)
     }
 
 #else
