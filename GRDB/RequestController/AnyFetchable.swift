@@ -13,20 +13,14 @@ extension AnyFetchable : Equatable {
     }
 }
 
-extension AnyFetchable : Hashable {
-    var hashValue: Int {
-        return row.hashValue
-    }
-}
-
 extension AnyFetchable where Fetched: Row {
-    var value: Fetched {
+    func unwrap() -> Fetched {
         return row as! Fetched // Row is final: this can't fail even though Swift compiler doesn't see it.
     }
 }
 
 extension AnyFetchable where Fetched: RowConvertible {
-    var value: Fetched {
+    func unwrap() -> Fetched {
         if let value = _value {
             return value
         } else {
@@ -39,13 +33,13 @@ extension AnyFetchable where Fetched: RowConvertible {
 }
 
 extension AnyFetchable where Fetched: DatabaseValueConvertible {
-    var value: Fetched {
+    func unwrap() -> Fetched {
         return row.value(atIndex: 0)
     }
 }
 
 extension AnyFetchable where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible {
-    var value: Fetched {
+    func unwrap() -> Fetched {
         return (row.value(atIndex: 0) as Fetched._Wrapped?) as! Fetched // Fetched is Fetched._Wrapped?: this can't fail even though Swift compiler doesn't see it.
     }
 }

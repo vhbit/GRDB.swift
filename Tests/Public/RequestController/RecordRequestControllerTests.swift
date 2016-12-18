@@ -22,13 +22,13 @@ private class ChangesRecorder<Record: RowConvertible> {
     }
     
     func controllerWillChange(_ controller: RequestController<Record>, count: Int? = nil) {
-        recordsBeforeChanges = controller.fetchedValues
+        recordsBeforeChanges = Array(controller)
         countBeforeChanges = count
     }
     
     /// The default implementation does nothing.
     func controllerDidChange(_ controller: RequestController<Record>, count: Int? = nil) {
-        recordsAfterChanges = controller.fetchedValues
+        recordsAfterChanges = Array(controller)
         countAfterChanges = count
         if let transactionExpectation = transactionExpectation {
             transactionExpectation.fulfill()
@@ -119,8 +119,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             
             let controller = try RequestController<Book>(dbQueue, sql: "SELECT * FROM books WHERE authorID = ?", arguments: [authorId])
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedValues!.count, 1)
-            XCTAssertEqual(controller.fetchedValues![0].title, "Don Quixote")
+            XCTAssertEqual(controller.count, 1)
+            XCTAssertEqual(controller[0].title, "Don Quixote")
         }
     }
     
@@ -140,8 +140,8 @@ class RecordRequestControllerTests: GRDBTestCase {
             let adapter = ColumnMapping(["id": "_id", "authorId": "_authorId", "title": "_title"])
             let controller = try RequestController<Book>(dbQueue, sql: "SELECT id AS _id, authorId AS _authorId, title AS _title FROM books WHERE authorID = ?", arguments: [authorId], adapter: adapter)
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedValues!.count, 1)
-            XCTAssertEqual(controller.fetchedValues![0].title, "Don Quixote")
+            XCTAssertEqual(controller.count, 1)
+            XCTAssertEqual(controller[0].title, "Don Quixote")
         }
     }
     
@@ -156,9 +156,9 @@ class RecordRequestControllerTests: GRDBTestCase {
             let request = Person.order(Column("name"))
             let controller = try RequestController(dbQueue, request: request)
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedValues!.count, 2)
-            XCTAssertEqual(controller.fetchedValues![0].name, "Cervantes")
-            XCTAssertEqual(controller.fetchedValues![1].name, "Plato")
+            XCTAssertEqual(controller.count, 2)
+            XCTAssertEqual(controller[0].name, "Cervantes")
+            XCTAssertEqual(controller[1].name, "Plato")
         }
     }
     
@@ -172,10 +172,9 @@ class RecordRequestControllerTests: GRDBTestCase {
             
             let request = Person.all()
             let controller = try RequestController(dbQueue, request: request)
-            XCTAssertTrue(controller.fetchedValues == nil)
             try controller.performFetch()
-            XCTAssertEqual(controller.fetchedValues!.count, 1)
-            XCTAssertEqual(controller.fetchedValues![0].name, "Arthur")
+            XCTAssertEqual(controller.count, 1)
+            XCTAssertEqual(controller[0].name, "Arthur")
         }
     }
     
@@ -534,7 +533,7 @@ class RecordRequestControllerTests: GRDBTestCase {
             
             let expectation = self.expectation(description: "expectation")
             controller.trackChanges {
-                persons = $0.fetchedValues!
+                persons = Array($0)
                 expectation.fulfill()
             }
             try dbQueue.inTransaction { db in

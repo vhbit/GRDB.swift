@@ -21,13 +21,13 @@
         }
         
         func controllerWillChange(_ controller: RequestController<Record>) {
-            recordsBeforeChanges = controller.fetchedValues!
+            recordsBeforeChanges = Array(controller)
         }
         
         /// The default implementation does nothing.
         func controller(_ controller: RequestController<Record>, didChangeRecord record: Record, withChange change: RequestChange) {
             if recordsonFirstChange == nil {
-                recordsonFirstChange = controller.fetchedValues!
+                recordsonFirstChange = Array(controller)
             }
             changes.append((record: record, change: change))
         }
@@ -102,13 +102,12 @@
                 
                 let request = Person.all()
                 let controller = try RequestController(dbQueue, request: request, compareRecordsByPrimaryKey: true)
-                XCTAssertTrue(controller.fetchedValues == nil)
                 try controller.performFetch()
                 XCTAssertEqual(controller.sections.count, 1)
                 XCTAssertEqual(controller.sections[0].count, 1)
                 XCTAssertEqual(controller.sections[0][0].name, "Arthur")
-                XCTAssertEqual(controller.fetchedValues!.count, 1)
-                XCTAssertEqual(controller.fetchedValues![0].name, "Arthur")
+                XCTAssertEqual(controller.count, 1)
+                XCTAssertEqual(controller[0].name, "Arthur")
                 XCTAssertEqual(controller[IndexPath(row: 0, section: 0)].name, "Arthur")
                 XCTAssertEqual(controller.indexPath(for: arthur), IndexPath(row: 0, section: 0))
             }
@@ -119,9 +118,8 @@
                 let dbQueue = try makeDatabaseQueue()
                 let request = Person.all()
                 let controller = try RequestController(dbQueue, request: request)
-                XCTAssertTrue(controller.fetchedValues == nil)
                 try controller.performFetch()
-                XCTAssertEqual(controller.fetchedValues!.count, 0)
+                XCTAssertEqual(controller.count, 0)
                 
                 // Just like NSFetchedResultsController
                 XCTAssertEqual(controller.sections.count, 1)
@@ -698,7 +696,7 @@
                 
                 let expectation = self.expectation(description: "expectation")
                 controller.trackChanges {
-                    persons = $0.fetchedValues!
+                    persons = Array($0)
                     expectation.fulfill()
                 }
                 try dbQueue.inTransaction { db in
