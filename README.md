@@ -4245,11 +4245,11 @@ let controller = FetchedRecordsController<Person>(
 ```
 
 
-After creating an instance, you invoke `performFetch()` to actually execute
+After creating an instance, you invoke `fetch()` to actually execute
 the fetch.
 
 ```swift
-try controller.performFetch()
+try controller.fetch()
 ```
 
 
@@ -4292,7 +4292,7 @@ controller.trackChanges(
     // controller's records have changed:
     didChange: { controller in ... })
 
-try controller.performFetch()
+try controller.fetch()
 ```
 
 See [Implementing Table View Updates](#implementing-table-view-updates) for more detail on table view updates on iOS.
@@ -4353,14 +4353,14 @@ The [notification callbacks](#the-changes-notifications) are notified of eventua
 
 > :point_up: **Note**: This behavior differs from Core Data's NSFetchedResultsController, which does not notify of record changes when the fetch request is replaced.
 
-**Change callbacks are invoked asynchronously.** This means that modifying the request from the main thread does *not* immediately triggers callbacks. When you need to take immediate action, force the controller to refresh immediately with its `performFetch` method. In this case, changes callbacks are *not* called:
+**Change callbacks are invoked asynchronously.** This means that modifying the request from the main thread does *not* immediately triggers callbacks. When you need to take immediate action, force the controller to refresh immediately with its `fetch` method. In this case, changes callbacks are *not* called:
 
 ```swift
 // Change request on the main thread:
 controller.setRequest(Person.order(Column("name")))
 // Here callbacks have not been called yet.
 // You can cancel them, and refresh records immediately:
-try controller.performFetch()
+try controller.fetch()
 ```
 
 ### FetchedRecordsController on iOS
@@ -4483,7 +4483,7 @@ See [GRDBDemoiOS](DemoApps/GRDBDemoiOS) for an sample app that uses FetchedRecor
 
 When the database itself can be read and modified from [any thread](#database-connections), fetched records controllers **must** be used from the main thread. Record changes are also [notified](#the-changes-notifications) on the main thread.
 
-**Change callbacks are invoked asynchronously.** This means that changes made from the main thread are *not* immediately notified. When you need to take immediate action, force the controller to refresh immediately with its `performFetch` method. In this case, changes callbacks are *not* called:
+**Change callbacks are invoked asynchronously.** This means that changes made from the main thread are *not* immediately notified. When you need to take immediate action, force the controller to refresh immediately with its `fetch` method. In this case, changes callbacks are *not* called:
 
 ```swift
 // Change database on the main thread:
@@ -4492,7 +4492,7 @@ try dbQueue.inDatabase { db in
 }
 // Here callbacks have not been called yet.
 // You can cancel them, and refresh records immediately:
-try controller.performFetch()
+try controller.fetch()
 ```
 
 > :point_up: **Note**: when the main thread does not fit your needs, give a serial dispatch queue to the controller initializer: the controller must then be used from this queue, and record changes are notified on this queue as well.
@@ -4502,7 +4502,7 @@ try controller.performFetch()
 > queue.async {
 >     let controller = try FetchedRecordsController(..., queue: queue)
 >     controller.trackChanges { /* in queue */ }
->     try controller.performFetch()
+>     try controller.fetch()
 > }
 > ```
 

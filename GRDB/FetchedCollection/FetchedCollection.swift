@@ -1,12 +1,12 @@
-/// You use RequestController to track changes in the results of an
+/// You use FetchedCollection to track changes in the results of an
 /// SQLite request.
 ///
-/// On iOS, RequestController can feed a UITableView, and animate rows
+/// On iOS, FetchedCollection can feed a UITableView, and animate rows
 /// when the results of the request change.
 ///
 /// See https://github.com/groue/GRDB.swift#fetchedrecordscontroller for
 /// more information.
-public final class RequestController<Fetched> {
+public final class FetchedCollection<Fetched> {
     // The items
     var fetchedItems: [AnyFetchable<Fetched>]?
     let unwrap: (AnyFetchable<Fetched>) -> Fetched
@@ -23,11 +23,26 @@ public final class RequestController<Fetched> {
     var observer: RequestObserver<Fetched>?
     
     // The eventual error handler
-    fileprivate var errorHandler: ((RequestController<Fetched>, Error) -> ())?
+    fileprivate var errorHandler: ((FetchedCollection<Fetched>, Error) -> ())?
     
     // MARK: - Initialization
     
     #if os(iOS)
+    convenience init<Request>(
+        _ databaseWriter: DatabaseWriter,
+        request: Request,
+        queue: DispatchQueue,
+        unwrap: @escaping (AnyFetchable<Fetched>) -> Fetched) throws
+        where Request: TypedRequest, Request.Fetched == Fetched
+    {
+        try self.init(
+            databaseWriter,
+            request: request,
+            queue: queue,
+            unwrap: unwrap,
+            itemsAreIdentical: { _ in false })
+    }
+    
     init<Request>(
         _ databaseWriter: DatabaseWriter,
         request: Request,
@@ -46,7 +61,7 @@ public final class RequestController<Fetched> {
     init<Request>(
         _ databaseWriter: DatabaseWriter,
         request: Request,
-        queue: DispatchQueue = .main,
+        queue: DispatchQueue,
         unwrap: @escaping (AnyFetchable<Fetched>) -> Fetched) throws
         where Request: TypedRequest, Request.Fetched == Fetched
     {
@@ -61,7 +76,7 @@ public final class RequestController<Fetched> {
     ///
     /// After executing this method, you can access the the fetched objects with
     /// the property fetchedRecords.
-    public func performFetch() throws {
+    public func fetch() throws {
         // If some changes are currently processed, make sure they are
         // discarded. But preserve eventual changes processing for future
         // changes.
@@ -99,7 +114,7 @@ public final class RequestController<Fetched> {
     public let queue: DispatchQueue
     
     /// Updates the fetch request, and notifies the delegate of changes in the
-    /// fetched records if delegate is not nil, and performFetch() has been
+    /// fetched records if delegate is not nil, and fetch() has been
     /// called.
     public func setRequest<Request>(_ request: Request) throws where Request: TypedRequest, Request.Fetched == Fetched {
         self.request = try databaseWriter.read { db in try ObservedRequest(db, request: request) }
@@ -126,7 +141,7 @@ public final class RequestController<Fetched> {
     }
     
     /// Updates the fetch request, and notifies the delegate of changes in the
-    /// fetched records if delegate is not nil, and performFetch() has been
+    /// fetched records if delegate is not nil, and fetch() has been
     /// called.
     public func setRequest(sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil) throws {
         try setRequest(SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self))
@@ -141,13 +156,13 @@ public final class RequestController<Fetched> {
     /// The request observation is not stopped, though: future transactions may
     /// successfully be handled, and the notified changes will then be based on
     /// the last successful fetch.
-    public func trackErrors(_ errorHandler: @escaping (RequestController<Fetched>, Error) -> ()) {
+    public func trackErrors(_ errorHandler: @escaping (FetchedCollection<Fetched>, Error) -> ()) {
         self.errorHandler = errorHandler
     }
 }
 
 #if os(iOS)
-    extension RequestController {
+    extension FetchedCollection {
         
         // MARK: - Tracking Changes
         
@@ -159,9 +174,9 @@ public final class RequestController<Fetched> {
         ///       removed, moved, or updated.
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges(
-            willChange: ((RequestController<Fetched>) -> ())? = nil,
-            onChange: ((RequestController<Fetched>, Fetched, RequestChange) -> ())? = nil,
-            didChange: ((RequestController<Fetched>) -> ())? = nil)
+            willChange: ((FetchedCollection<Fetched>) -> ())? = nil,
+            onChange: ((FetchedCollection<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            didChange: ((FetchedCollection<Fetched>) -> ())? = nil)
         {
             trackChanges(
                 fetchAlongside: { _ in },
@@ -185,9 +200,9 @@ public final class RequestController<Fetched> {
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            onChange: ((RequestController<Fetched>, Fetched, RequestChange) -> ())? = nil,
-            didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
+            willChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            onChange: ((FetchedCollection<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
             // discarded because they would trigger previously set callbacks.
@@ -224,15 +239,15 @@ public final class RequestController<Fetched> {
         }
     }
 #else
-    extension RequestController {
+    extension FetchedCollection {
         /// Registers changes notification callbacks.
         ///
         /// - parameters:
         ///     - willChange: Invoked before records are updated.
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges(
-            willChange: ((RequestController<Fetched>) -> ())? = nil,
-            didChange: ((RequestController<Fetched>) -> ())? = nil)
+            willChange: ((FetchedCollection<Fetched>) -> ())? = nil,
+            didChange: ((FetchedCollection<Fetched>) -> ())? = nil)
         {
             trackChanges(
                 fetchAlongside: { _ in },
@@ -253,8 +268,8 @@ public final class RequestController<Fetched> {
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
-            didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
+            willChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
             // discarded because they would trigger previously set callbacks.
@@ -297,14 +312,14 @@ struct ObservedRequest<T> : TypedRequest {
     }
 }
 
-// MARK: - RequestController as Collection
+// MARK: - FetchedCollection as Collection
 
-extension RequestController : Collection {
+extension FetchedCollection : Collection {
     /// The number of records (rows) in the section.
     public var count: Int {
         guard let items = fetchedItems else {
             // Programmer error
-            fatalError("the performFetch() method must be called before accessing elements")
+            fatalError("the fetch() method must be called before accessing elements")
         }
         return items.count
     }
@@ -324,7 +339,7 @@ extension RequestController : Collection {
     public subscript(index: Int) -> Fetched {
         guard let items = fetchedItems else {
             // Programmer error
-            fatalError("the performFetch() method must be called before accessing elements")
+            fatalError("the fetch() method must be called before accessing elements")
         }
         return unwrap(items[index])
     }
@@ -340,40 +355,12 @@ extension RequestController : Collection {
     public func formIndex(after i: inout Int) {
         i += 1
     }
-    
-    #if os(iOS)
-    // MARK: - Querying Sections Information
-    
-    /// The sections for the fetched records (iOS only).
-    ///
-    /// You typically use the sections array when implementing
-    /// UITableViewDataSource methods, such as `numberOfSectionsInTableView`.
-    ///
-    /// The sections array is never empty, even when there are no fetched
-    /// records. In this case, there is a single empty section.
-    public var sections: [RequestSection<Fetched>] {
-        // We only support a single section so far.
-        // We also return a single section when there are no fetched
-        // records, just like NSFetchedResultsController.
-        return [RequestSection(controller: self)]
-    }
-    
-    /// Returns the object at the given index path (iOS only).
-    ///
-    /// - parameter indexPath: An index path in the fetched records.
-    ///
-    ///     If indexPath does not describe a valid index path in the fetched
-    ///     records, a fatal error is raised.
-    public subscript(_ indexPath: IndexPath) -> Fetched {
-        return self[indexPath.row]
-    }
-    #endif
 }
 
 // MARK: - Changes
 
 fileprivate func makeFetchFunction<Fetched, T>(
-    controller: RequestController<Fetched>,
+    controller: FetchedCollection<Fetched>,
     fetchAlongside: @escaping (Database) throws -> T,
     completion: @escaping (Result<(fetchedItems: [AnyFetchable<Fetched>], fetchedAlongside: T, observer: RequestObserver<Fetched>)>) -> ()
     ) -> (RequestObserver<Fetched>) -> ()
@@ -446,12 +433,12 @@ fileprivate func makeFetchFunction<Fetched, T>(
 
 #if os(iOS)
     func makeFetchAndNotifyChangesFunction<Fetched, T>(
-        controller: RequestController<Fetched>,
+        controller: FetchedCollection<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
         itemsAreIdentical: @escaping AnyFetchable<Fetched>.Comparator,
-        willChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
-        onChanges: ((_ controller: RequestController<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
-        didChange: ((_ controller: RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
+        willChange: ((_ controller: FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?,
+        onChanges: ((_ controller: FetchedCollection<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
+        didChange: ((_ controller: FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
         // Make sure we keep a weak reference to the fetched records controller,
@@ -647,10 +634,10 @@ fileprivate func makeFetchFunction<Fetched, T>(
     /// Returns a function that fetches and notify changes, and erases the type
     /// of values that are fetched alongside tracked records.
     func makeFetchAndNotifyChangesFunction<Fetched, T>(
-        controller: RequestController<Fetched>,
+        controller: FetchedCollection<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
-        willChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?,
-        didChange: ((RequestController<Fetched>, _ fetchedAlongside: T) -> ())?
+        willChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?,
+        didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
         // Make sure we keep a weak reference to the fetched records controller,
@@ -701,41 +688,71 @@ fileprivate func makeFetchFunction<Fetched, T>(
 // MARK: - UITableView Support
 
 #if os(iOS)
-    /// A section given by a RequestController.
+    extension FetchedCollection {
+        
+        // MARK: - Querying Sections Information
+        
+        /// The sections for the fetched records (iOS only).
+        ///
+        /// You typically use the sections array when implementing
+        /// UITableViewDataSource methods, such as `numberOfSectionsInTableView`.
+        ///
+        /// The sections array is never empty, even when there are no fetched
+        /// records. In this case, there is a single empty section.
+        public var sections: [RequestSection<Fetched>] {
+            // We only support a single section so far.
+            // We also return a single section when there are no fetched
+            // records, just like NSFetchedResultsController.
+            return [RequestSection(collection: self)]
+        }
+        
+        /// Returns the object at the given index path (iOS only).
+        ///
+        /// - parameter indexPath: An index path in the fetched records.
+        ///
+        ///     If indexPath does not describe a valid index path in the fetched
+        ///     records, a fatal error is raised.
+        public subscript(_ indexPath: IndexPath) -> Fetched {
+            // We only support a single section so far.
+            return self[indexPath.row]
+        }
+    }
+    
+    /// A section given by a FetchedCollection.
     public struct RequestSection<Fetched> : Collection {
-        let controller: RequestController<Fetched>
+        let collection: FetchedCollection<Fetched>
         
         /// The number of records (rows) in the section.
         public var count: Int {
-            return controller.count
+            return collection.count
         }
         
         /// The index of the first element.
         public var startIndex: Int {
-            return controller.startIndex
+            return collection.startIndex
         }
         
         /// The "past-the-end" index, successor of the index of the last
         /// element.
         public var endIndex: Int {
-            return controller.endIndex
+            return collection.endIndex
         }
         
         /// Accesses the (ColumnName, DatabaseValue) pair at given index.
         public subscript(index: Int) -> Fetched {
-            return controller[index]
+            return collection[index]
         }
         
         /// Returns the position immediately after `i`.
         ///
         /// - Precondition: `(startIndex..<endIndex).contains(i)`
         public func index(after i: Int) -> Int {
-            return controller.index(after: i)
+            return collection.index(after: i)
         }
         
         /// Replaces `i` with its successor.
         public func formIndex(after i: inout Int) {
-            controller.formIndex(after: &i)
+            collection.formIndex(after: &i)
         }
     }
     
@@ -792,7 +809,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         }
     }
     
-    /// A change event given by a RequestController to its delegate.
+    /// A change event given by a FetchedCollection to its delegate.
     ///
     /// The move and update events hold a *changes* dictionary. Its keys are column
     /// names, and values the old values that have been changed.

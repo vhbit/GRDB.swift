@@ -1,5 +1,5 @@
 #if os(iOS)
-    extension RequestController where Fetched: MutablePersistable {
+    extension FetchedCollection where Fetched: MutablePersistable {
         
         /// Returns the indexPath of a given record (iOS only).
         ///

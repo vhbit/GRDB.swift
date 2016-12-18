@@ -646,9 +646,9 @@ class PrimaryKeyHiddenRowIDTests : GRDBTestCase {
     }
     
     
-    // MARK: - RequestController
+    // MARK: - FetchedCollection
     
-    func testRequestController() {
+    func testFetchedCollection() {
         assertNoError {
             let dbQueue = try makeDatabaseQueue()
             let person = Person(name: "Arthur")
@@ -657,11 +657,11 @@ class PrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
             
             let expectation = self.expectation(description: "expectation")
-            let controller: RequestController<Person>
+            let persons: FetchedCollection<Person>
             #if os(iOS)
-                controller = try RequestController(dbQueue, request: Person.all(), compareRecordsByPrimaryKey: true)
+                persons = try FetchedCollection(dbQueue, request: Person.all(), compareRecordsByPrimaryKey: true)
                 var update = false
-                controller.trackChanges(
+                persons.trackChanges(
                     onChange: { (_, _, change) in
                         switch change {
                         case .update:
@@ -674,12 +674,12 @@ class PrimaryKeyHiddenRowIDTests : GRDBTestCase {
                         expectation.fulfill()
                 })
             #else
-                controller = try RequestController(dbQueue, request: Person.all())
-                controller.trackChanges { _ in
+                persons = try FetchedCollection(dbQueue, request: Person.all())
+                persons.trackChanges { _ in
                     expectation.fulfill()
                 }
             #endif
-            try controller.performFetch()
+            try persons.fetch()
             try dbQueue.inDatabase { db in
                 person.name = "Barbara"
                 try person.update(db)

@@ -2,7 +2,7 @@ import UIKit
 import GRDB
 
 class PersonsViewController: UITableViewController {
-    var persons: RequestController<Person>!
+    var persons: FetchedCollection<Person>!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -13,7 +13,7 @@ class PersonsViewController: UITableViewController {
         ]
         
         let request = personsSortedByScore
-        persons = try! RequestController(dbQueue, request: request, compareRecordsByPrimaryKey: true)
+        persons = try! FetchedCollection(dbQueue, request: request, compareRecordsByPrimaryKey: true)
         persons.trackChanges(
             willChange: { [unowned self] _ in
                 self.tableView.beginUpdates()
@@ -47,7 +47,7 @@ class PersonsViewController: UITableViewController {
             didChange: { [unowned self] _ in
                 self.tableView.endUpdates()
             })
-        try! persons.performFetch()
+        try! persons.fetch()
         
         configureToolbar()
     }
