@@ -105,7 +105,7 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             try recordsFromSQL.fetch()
             try recordsFromRequest.fetch()
             
-            // setRequest
+            // change request
             let sql2 = "SELECT ? AS name, ? AS id UNION ALL SELECT ?, ?"
             let arguments2: StatementArguments = ["c", 3, "d", 4]
             let sqlRequest2 = SQLRequest(sql2, arguments: arguments2)
@@ -442,6 +442,122 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             XCTAssertEqual(rowsFromRequestChangesRecorder.elementsAfterChanges, [["name": "c", "id": 3], ["name": "d", "id": 4]])
             XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, [AnyRowConvertible(row: ["name": "c", "id": 3]), AnyRowConvertible(row: ["name": "d", "id": 4])])
             XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, [AnyRowConvertible(row: ["name": "c", "id": 3]), AnyRowConvertible(row: ["name": "d", "id": 4])])
+        }
+    }
+    
+    func testTrackedTablesChanges() {
+        assertNoError {
+            let dbPool = try makeDatabasePool()
+            try dbPool.write { db in
+                try db.create(table: "table1") { t in
+                    t.column("id", .integer).primaryKey()
+                    t.column("name", .text)
+                }
+                try db.create(table: "table2") { t in
+                    t.column("id", .integer).primaryKey()
+                    t.column("name", .text)
+                }
+                try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [1, "a"])
+                try db.execute("INSERT INTO table2 (id, name) VALUES (?, ?)", arguments: [2, "b"])
+            }
+            
+            let sql1 = "SELECT name, id FROM table1 ORDER BY id"
+            let sqlRequest1 = SQLRequest(sql1)
+            
+            let valuesFromSQL = try FetchedCollection<String>(dbPool, sql: sql1)
+            let valuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest1.bound(to: String.self))
+            let optionalValuesFromSQL = try FetchedCollection<String?>(dbPool, sql: sql1)
+            let optionalValuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest1.bound(to: Optional<String>.self))
+            let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql1)
+            let rowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest1.bound(to: Row.self))
+            let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql1)
+            let recordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest1.bound(to: AnyRowConvertible.self))
+            
+            let valuesFromSQLChangesRecorder = ChangesRecorder<String, Void>()
+            let valuesFromRequestChangesRecorder = ChangesRecorder<String, Void>()
+            let optionalValuesFromSQLChangesRecorder = ChangesRecorder<String?, Void>()
+            let optionalValuesFromRequestChangesRecorder = ChangesRecorder<String?, Void>()
+            let rowsFromSQLChangesRecorder = ChangesRecorder<Row, Void>()
+            let rowsFromRequestChangesRecorder = ChangesRecorder<Row, Void>()
+            let recordsFromSQLChangesRecorder = ChangesRecorder<AnyRowConvertible, Void>()
+            let recordsFromRequestChangesRecorder = ChangesRecorder<AnyRowConvertible, Void>()
+            
+            valuesFromSQLChangesRecorder.trackChanges(in: valuesFromSQL)
+            valuesFromRequestChangesRecorder.trackChanges(in: valuesFromRequest)
+            optionalValuesFromSQLChangesRecorder.trackChanges(in: optionalValuesFromSQL)
+            optionalValuesFromRequestChangesRecorder.trackChanges(in: optionalValuesFromRequest)
+            rowsFromSQLChangesRecorder.trackChanges(in: rowsFromSQL)
+            rowsFromRequestChangesRecorder.trackChanges(in: rowsFromRequest)
+            recordsFromSQLChangesRecorder.trackChanges(in: recordsFromSQL)
+            recordsFromRequestChangesRecorder.trackChanges(in: recordsFromRequest)
+            
+            try valuesFromSQL.fetch()
+            try valuesFromRequest.fetch()
+            try optionalValuesFromSQL.fetch()
+            try optionalValuesFromRequest.fetch()
+            try rowsFromSQL.fetch()
+            try rowsFromRequest.fetch()
+            try recordsFromSQL.fetch()
+            try recordsFromRequest.fetch()
+            
+            // change request
+            let sql2 = "SELECT name, id FROM table2 ORDER BY id"
+            let sqlRequest2 = SQLRequest(sql2)
+            
+            try valuesFromSQL.setRequest(sql: sql2)
+            try valuesFromRequest.setRequest(sqlRequest2.bound(to: String.self))
+            try optionalValuesFromSQL.setRequest(sql: sql2)
+            try optionalValuesFromRequest.setRequest(sqlRequest2.bound(to: Optional<String>.self))
+            try rowsFromSQL.setRequest(sql: sql2)
+            try rowsFromRequest.setRequest(sqlRequest2.bound(to: Row.self))
+            try recordsFromSQL.setRequest(sql: sql2)
+            try recordsFromRequest.setRequest(sqlRequest2.bound(to: AnyRowConvertible.self))
+            
+            valuesFromSQLChangesRecorder.expectation = expectation(description: "valuesFromSQL")
+            valuesFromRequestChangesRecorder.expectation = expectation(description: "valuesFromRequest")
+            optionalValuesFromSQLChangesRecorder.expectation = expectation(description: "optionalValuesFromSQL")
+            optionalValuesFromRequestChangesRecorder.expectation = expectation(description: "optionalValuesFromRequest")
+            rowsFromSQLChangesRecorder.expectation = expectation(description: "rowsFromSQL")
+            rowsFromRequestChangesRecorder.expectation = expectation(description: "rowsFromRequest")
+            recordsFromSQLChangesRecorder.expectation = expectation(description: "recordsFromSQL")
+            recordsFromRequestChangesRecorder.expectation = expectation(description: "recordsFromRequest")
+            waitForExpectations(timeout: 1, handler: nil)
+            
+            // collection now contains new values
+            XCTAssertEqual(Array(valuesFromSQL), ["b"])
+            XCTAssertEqual(Array(valuesFromRequest), ["b"])
+            XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, ["b"])
+            XCTAssertEqual(Array(optionalValuesFromRequest).map { $0! }, ["b"])
+            XCTAssertEqual(Array(rowsFromSQL), [["name": "b", "id": 2]])
+            XCTAssertEqual(Array(rowsFromRequest), [["name": "b", "id": 2]])
+            XCTAssertEqual(Array(recordsFromSQL), [AnyRowConvertible(row: ["name": "b", "id": 2])])
+            XCTAssertEqual(Array(recordsFromRequest), [AnyRowConvertible(row: ["name": "b", "id": 2])])
+            
+            // modify table2
+            try dbPool.writeInTransaction { db in
+                try db.execute("INSERT INTO table2 (id, name) VALUES (?, ?)", arguments: [3, "c"])
+                return .commit
+            }
+            
+            valuesFromSQLChangesRecorder.expectation = expectation(description: "valuesFromSQL")
+            valuesFromRequestChangesRecorder.expectation = expectation(description: "valuesFromRequest")
+            optionalValuesFromSQLChangesRecorder.expectation = expectation(description: "optionalValuesFromSQL")
+            optionalValuesFromRequestChangesRecorder.expectation = expectation(description: "optionalValuesFromRequest")
+            rowsFromSQLChangesRecorder.expectation = expectation(description: "rowsFromSQL")
+            rowsFromRequestChangesRecorder.expectation = expectation(description: "rowsFromRequest")
+            recordsFromSQLChangesRecorder.expectation = expectation(description: "recordsFromSQL")
+            recordsFromRequestChangesRecorder.expectation = expectation(description: "recordsFromRequest")
+            waitForExpectations(timeout: 1, handler: nil)
+            
+            // collection now contains new values
+            XCTAssertEqual(Array(valuesFromSQL), ["b", "c"])
+            XCTAssertEqual(Array(valuesFromRequest), ["b", "c"])
+            XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, ["b", "c"])
+            XCTAssertEqual(Array(optionalValuesFromRequest).map { $0! }, ["b", "c"])
+            XCTAssertEqual(Array(rowsFromSQL), [["name": "b", "id": 2], ["name": "c", "id": 3]])
+            XCTAssertEqual(Array(rowsFromRequest), [["name": "b", "id": 2], ["name": "c", "id": 3]])
+            XCTAssertEqual(Array(recordsFromSQL), [AnyRowConvertible(row: ["name": "b", "id": 2]), AnyRowConvertible(row: ["name": "c", "id": 3])])
+            XCTAssertEqual(Array(recordsFromRequest), [AnyRowConvertible(row: ["name": "b", "id": 2]), AnyRowConvertible(row: ["name": "c", "id": 3])])
         }
     }
     
