@@ -232,7 +232,7 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             
             // transaction: delete
             try dbPool.writeInTransaction { db in
-                try db.execute("DELETE FROM table1")
+                try db.execute("DELETE FROM table1")  // here we are also testing that truncate optimization doesn't break FetchedCollection
                 return .commit
             }
             
