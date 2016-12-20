@@ -32,16 +32,16 @@ private class ChangesRecorder<Fetched, T> {
             didChange: { (collection, fetchedAlonside) in self.collectionDidChange(collection, fetchedAlongside: fetchedAlonside) })
     }
     
-    private func collectionWillChange(_ collection: FetchedCollection<Fetched>) {
+    func collectionWillChange(_ collection: FetchedCollection<Fetched>) {
         elementsBeforeChanges = Array(collection)
     }
     
-    private func collectionDidChange(_ collection: FetchedCollection<Fetched>) {
+    func collectionDidChange(_ collection: FetchedCollection<Fetched>) {
         elementsAfterChanges = Array(collection)
         expectation?.fulfill()
     }
     
-    private func collectionDidChange(_ collection: FetchedCollection<Fetched>, fetchedAlongside: T) {
+    func collectionDidChange(_ collection: FetchedCollection<Fetched>, fetchedAlongside: T) {
         elementsAfterChanges = Array(collection)
         fetchedAlongsideAfterChanges = fetchedAlongside
         expectation?.fulfill()
@@ -546,4 +546,89 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             XCTAssertEqual(recordsFromRequestChangesRecorder.fetchedAlongsideAfterChanges, 2)
         }
     }
+    
+    func testTrackChangesWithTrailingClosure() {
+        assertNoError {
+            let dbPool = try makeDatabasePool()
+            try dbPool.write { db in
+                try db.create(table: "table1") { t in
+                    t.column("id", .integer).primaryKey()
+                    t.column("name", .text)
+                }
+                try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [1, "a"])
+                try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [2, "b"])
+            }
+            
+            let sql = "SELECT name, id FROM table1 ORDER BY id"
+            let sqlRequest = SQLRequest(sql)
+            
+            let valuesFromSQL = try FetchedCollection<String>(dbPool, sql: sql)
+            let valuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: String.self))
+            let optionalValuesFromSQL = try FetchedCollection<String?>(dbPool, sql: sql)
+            let optionalValuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Optional<String>.self))
+            let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql)
+            let rowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Row.self))
+            let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql)
+            let recordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: AnyRowConvertible.self))
+            
+            let valuesFromSQLChangesRecorder = ChangesRecorder<String, Void>()
+            let valuesFromRequestChangesRecorder = ChangesRecorder<String, Void>()
+            let optionalValuesFromSQLChangesRecorder = ChangesRecorder<String?, Void>()
+            let optionalValuesFromRequestChangesRecorder = ChangesRecorder<String?, Void>()
+            let rowsFromSQLChangesRecorder = ChangesRecorder<Row, Void>()
+            let rowsFromRequestChangesRecorder = ChangesRecorder<Row, Void>()
+            let recordsFromSQLChangesRecorder = ChangesRecorder<AnyRowConvertible, Void>()
+            let recordsFromRequestChangesRecorder = ChangesRecorder<AnyRowConvertible, Void>()
+            
+            func trackChangesWithTrailingClosure<Fetched>(in collection: FetchedCollection<Fetched>, with recorder: ChangesRecorder<Fetched, Void>) {
+                collection.trackChanges { collection in recorder.collectionDidChange(collection) }
+            }
+            trackChangesWithTrailingClosure(in: valuesFromSQL, with: valuesFromSQLChangesRecorder)
+            trackChangesWithTrailingClosure(in: valuesFromRequest, with: valuesFromRequestChangesRecorder)
+            trackChangesWithTrailingClosure(in: optionalValuesFromSQL, with: optionalValuesFromSQLChangesRecorder)
+            trackChangesWithTrailingClosure(in: optionalValuesFromRequest, with: optionalValuesFromRequestChangesRecorder)
+            trackChangesWithTrailingClosure(in: rowsFromSQL, with: rowsFromSQLChangesRecorder)
+            trackChangesWithTrailingClosure(in: rowsFromRequest, with: rowsFromRequestChangesRecorder)
+            trackChangesWithTrailingClosure(in: recordsFromSQL, with: recordsFromSQLChangesRecorder)
+            trackChangesWithTrailingClosure(in: recordsFromRequest, with: recordsFromRequestChangesRecorder)
+            
+            try valuesFromSQL.fetch()
+            try valuesFromRequest.fetch()
+            try optionalValuesFromSQL.fetch()
+            try optionalValuesFromRequest.fetch()
+            try rowsFromSQL.fetch()
+            try rowsFromRequest.fetch()
+            try recordsFromSQL.fetch()
+            try recordsFromRequest.fetch()
+            
+            // transaction
+            try dbPool.writeInTransaction { db in
+                try db.execute("DELETE FROM table1")
+                try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [3, "c"])
+                try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [4, "d"])
+                return .commit
+            }
+            
+            valuesFromSQLChangesRecorder.expectation = expectation(description: "valuesFromSQL")
+            valuesFromRequestChangesRecorder.expectation = expectation(description: "valuesFromRequest")
+            optionalValuesFromSQLChangesRecorder.expectation = expectation(description: "optionalValuesFromSQL")
+            optionalValuesFromRequestChangesRecorder.expectation = expectation(description: "optionalValuesFromRequest")
+            rowsFromSQLChangesRecorder.expectation = expectation(description: "rowsFromSQL")
+            rowsFromRequestChangesRecorder.expectation = expectation(description: "rowsFromRequest")
+            recordsFromSQLChangesRecorder.expectation = expectation(description: "recordsFromSQL")
+            recordsFromRequestChangesRecorder.expectation = expectation(description: "recordsFromRequest")
+            waitForExpectations(timeout: 1, handler: nil)
+            
+            // collection now contains new values
+            XCTAssertEqual(valuesFromSQLChangesRecorder.elementsAfterChanges, ["c", "d"])
+            XCTAssertEqual(valuesFromRequestChangesRecorder.elementsAfterChanges, ["c", "d"])
+            XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsAfterChanges.map { $0! }, ["c", "d"])
+            XCTAssertEqual(optionalValuesFromRequestChangesRecorder.elementsAfterChanges.map { $0! }, ["c", "d"])
+            XCTAssertEqual(rowsFromSQLChangesRecorder.elementsAfterChanges, [["name": "c", "id": 3], ["name": "d", "id": 4]])
+            XCTAssertEqual(rowsFromRequestChangesRecorder.elementsAfterChanges, [["name": "c", "id": 3], ["name": "d", "id": 4]])
+            XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, [AnyRowConvertible(row: ["name": "c", "id": 3]), AnyRowConvertible(row: ["name": "d", "id": 4])])
+            XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, [AnyRowConvertible(row: ["name": "c", "id": 3]), AnyRowConvertible(row: ["name": "d", "id": 4])])
+        }
+    }
+    
 }
