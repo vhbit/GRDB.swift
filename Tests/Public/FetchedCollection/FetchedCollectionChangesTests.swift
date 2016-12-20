@@ -230,9 +230,72 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             try recordsFromSQL.fetch()
             try recordsFromRequest.fetch()
             
-            // transaction
+            // transaction: delete
             try dbPool.writeInTransaction { db in
                 try db.execute("DELETE FROM table1")
+                return .commit
+            }
+            
+            // collection still contains initial values
+            do {
+                let expectedRows: [Row] = [["name": "a", "id": 1], ["name": "b", "id": 2]]
+                XCTAssertEqual(Array(valuesFromSQL), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(valuesFromRequest), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromRequest).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(rowsFromSQL), expectedRows)
+                XCTAssertEqual(Array(rowsFromRequest), expectedRows)
+                XCTAssertEqual(Array(recordsFromSQL), expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            
+            valuesFromSQLChangesRecorder.expectation = expectation(description: "valuesFromSQL")
+            valuesFromRequestChangesRecorder.expectation = expectation(description: "valuesFromRequest")
+            optionalValuesFromSQLChangesRecorder.expectation = expectation(description: "optionalValuesFromSQL")
+            optionalValuesFromRequestChangesRecorder.expectation = expectation(description: "optionalValuesFromRequest")
+            rowsFromSQLChangesRecorder.expectation = expectation(description: "rowsFromSQL")
+            rowsFromRequestChangesRecorder.expectation = expectation(description: "rowsFromRequest")
+            recordsFromSQLChangesRecorder.expectation = expectation(description: "recordsFromSQL")
+            recordsFromRequestChangesRecorder.expectation = expectation(description: "recordsFromRequest")
+            waitForExpectations(timeout: 1, handler: nil)
+            
+            // collection now contains new values
+            do {
+                let expectedRows: [Row] = []
+                XCTAssertEqual(Array(valuesFromSQL), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(valuesFromRequest), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromRequest).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(rowsFromSQL), expectedRows)
+                XCTAssertEqual(Array(rowsFromRequest), expectedRows)
+                XCTAssertEqual(Array(recordsFromSQL), expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            do {
+                let expectedRows: [Row] = [["name": "a", "id": 1], ["name": "b", "id": 2]]
+                XCTAssertEqual(valuesFromSQLChangesRecorder.elementsBeforeChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(valuesFromRequestChangesRecorder.elementsBeforeChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsBeforeChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromRequestChangesRecorder.elementsBeforeChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(rowsFromSQLChangesRecorder.elementsBeforeChanges, expectedRows)
+                XCTAssertEqual(rowsFromRequestChangesRecorder.elementsBeforeChanges, expectedRows)
+                XCTAssertEqual(recordsFromSQLChangesRecorder.elementsBeforeChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(recordsFromRequestChangesRecorder.elementsBeforeChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            do {
+                let expectedRows: [Row] = []
+                XCTAssertEqual(valuesFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(valuesFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsAfterChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromRequestChangesRecorder.elementsAfterChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(rowsFromSQLChangesRecorder.elementsAfterChanges, expectedRows)
+                XCTAssertEqual(rowsFromRequestChangesRecorder.elementsAfterChanges, expectedRows)
+                XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            
+            // transaction: insert
+            try dbPool.writeInTransaction { db in
                 try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [3, "c"])
                 try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [4, "d"])
                 return .commit
@@ -240,7 +303,7 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             
             // collection still contains initial values
             do {
-                let expectedRows: [Row] = [["name": "a", "id": 1], ["name": "b", "id": 2]]
+                let expectedRows: [Row] = []
                 XCTAssertEqual(Array(valuesFromSQL), expectedRows.map { $0.value(atIndex: 0) })
                 XCTAssertEqual(Array(valuesFromRequest), expectedRows.map { $0.value(atIndex: 0) })
                 XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
@@ -274,7 +337,7 @@ class FetchedCollectionChangesTests: GRDBTestCase {
                 XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
             }
             do {
-                let expectedRows: [Row] = [["name": "a", "id": 1], ["name": "b", "id": 2]]
+                let expectedRows: [Row] = []
                 XCTAssertEqual(valuesFromSQLChangesRecorder.elementsBeforeChanges, expectedRows.map { $0.value(atIndex: 0) })
                 XCTAssertEqual(valuesFromRequestChangesRecorder.elementsBeforeChanges, expectedRows.map { $0.value(atIndex: 0) })
                 XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsBeforeChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
@@ -286,6 +349,70 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             }
             do {
                 let expectedRows: [Row] = [["name": "c", "id": 3], ["name": "d", "id": 4]]
+                XCTAssertEqual(valuesFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(valuesFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsAfterChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromRequestChangesRecorder.elementsAfterChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(rowsFromSQLChangesRecorder.elementsAfterChanges, expectedRows)
+                XCTAssertEqual(rowsFromRequestChangesRecorder.elementsAfterChanges, expectedRows)
+                XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            
+            // transaction: update
+            try dbPool.writeInTransaction { db in
+                try db.execute("UPDATE table1 SET name = ? WHERE id = ?", arguments: ["e", 3])
+                return .commit
+            }
+            
+            // collection still contains initial values
+            do {
+                let expectedRows: [Row] = [["name": "c", "id": 3], ["name": "d", "id": 4]]
+                XCTAssertEqual(Array(valuesFromSQL), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(valuesFromRequest), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromRequest).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(rowsFromSQL), expectedRows)
+                XCTAssertEqual(Array(rowsFromRequest), expectedRows)
+                XCTAssertEqual(Array(recordsFromSQL), expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            
+            valuesFromSQLChangesRecorder.expectation = expectation(description: "valuesFromSQL")
+            valuesFromRequestChangesRecorder.expectation = expectation(description: "valuesFromRequest")
+            optionalValuesFromSQLChangesRecorder.expectation = expectation(description: "optionalValuesFromSQL")
+            optionalValuesFromRequestChangesRecorder.expectation = expectation(description: "optionalValuesFromRequest")
+            rowsFromSQLChangesRecorder.expectation = expectation(description: "rowsFromSQL")
+            rowsFromRequestChangesRecorder.expectation = expectation(description: "rowsFromRequest")
+            recordsFromSQLChangesRecorder.expectation = expectation(description: "recordsFromSQL")
+            recordsFromRequestChangesRecorder.expectation = expectation(description: "recordsFromRequest")
+            waitForExpectations(timeout: 1, handler: nil)
+            
+            // collection now contains new values
+            do {
+                let expectedRows: [Row] = [["name": "e", "id": 3], ["name": "d", "id": 4]]
+                XCTAssertEqual(Array(valuesFromSQL), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(valuesFromRequest), expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromSQL).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(optionalValuesFromRequest).map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(Array(rowsFromSQL), expectedRows)
+                XCTAssertEqual(Array(rowsFromRequest), expectedRows)
+                XCTAssertEqual(Array(recordsFromSQL), expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            do {
+                let expectedRows: [Row] = [["name": "c", "id": 3], ["name": "d", "id": 4]]
+                XCTAssertEqual(valuesFromSQLChangesRecorder.elementsBeforeChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(valuesFromRequestChangesRecorder.elementsBeforeChanges, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsBeforeChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(optionalValuesFromRequestChangesRecorder.elementsBeforeChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
+                XCTAssertEqual(rowsFromSQLChangesRecorder.elementsBeforeChanges, expectedRows)
+                XCTAssertEqual(rowsFromRequestChangesRecorder.elementsBeforeChanges, expectedRows)
+                XCTAssertEqual(recordsFromSQLChangesRecorder.elementsBeforeChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                XCTAssertEqual(recordsFromRequestChangesRecorder.elementsBeforeChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+            }
+            do {
+                let expectedRows: [Row] = [["name": "e", "id": 3], ["name": "d", "id": 4]]
                 XCTAssertEqual(valuesFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { $0.value(atIndex: 0) })
                 XCTAssertEqual(valuesFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { $0.value(atIndex: 0) })
                 XCTAssertEqual(optionalValuesFromSQLChangesRecorder.elementsAfterChanges.map { $0! }, expectedRows.map { $0.value(atIndex: 0) })
