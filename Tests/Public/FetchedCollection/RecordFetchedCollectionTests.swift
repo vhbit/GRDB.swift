@@ -10,20 +10,17 @@ import XCTest
 private class ChangesRecorder<Record: RowConvertible> {
     var recordsBeforeChanges: [Record]!
     var recordsAfterChanges: [Record]!
-    var countBeforeChanges: Int?
     var countAfterChanges: Int?
     var transactionExpectation: XCTestExpectation? {
         didSet {
             recordsBeforeChanges = nil
             recordsAfterChanges = nil
-            countBeforeChanges = nil
             countAfterChanges = nil
         }
     }
     
-    func collectionWillChange(_ collection: FetchedCollection<Record>, count: Int? = nil) {
+    func collectionWillChange(_ collection: FetchedCollection<Record>) {
         recordsBeforeChanges = Array(collection)
-        countBeforeChanges = count
     }
     
     /// The default implementation does nothing.
@@ -554,7 +551,7 @@ class RecordFetchedCollectionTests: GRDBTestCase {
             let recorder = ChangesRecorder<Person>()
             persons.trackChanges(
                 fetchAlongside: { db in try Person.fetchCount(db) },
-                willChange: { (collection, count) in recorder.collectionWillChange(collection, count: count) },
+                willChange: { collection in recorder.collectionWillChange(collection) },
                 didChange: { (collection, count) in recorder.collectionDidChange(collection, count: count) })
             try persons.fetch()
             
@@ -570,7 +567,6 @@ class RecordFetchedCollectionTests: GRDBTestCase {
             XCTAssertEqual(recorder.recordsBeforeChanges.count, 0)
             XCTAssertEqual(recorder.recordsAfterChanges.count, 1)
             XCTAssertEqual(recorder.recordsAfterChanges.map { $0.name }, ["Arthur"])
-            XCTAssertEqual(recorder.countBeforeChanges!, 1)
             XCTAssertEqual(recorder.countAfterChanges!, 1)
             
             // Second insert
@@ -587,7 +583,6 @@ class RecordFetchedCollectionTests: GRDBTestCase {
             XCTAssertEqual(recorder.recordsBeforeChanges.map { $0.name }, ["Arthur"])
             XCTAssertEqual(recorder.recordsAfterChanges.count, 2)
             XCTAssertEqual(recorder.recordsAfterChanges.map { $0.name }, ["Arthur", "Barbara"])
-            XCTAssertEqual(recorder.countBeforeChanges!, 2)
             XCTAssertEqual(recorder.countAfterChanges!, 2)
         }
     }

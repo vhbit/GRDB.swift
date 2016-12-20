@@ -180,7 +180,7 @@ public final class FetchedCollection<Fetched> {
         {
             trackChanges(
                 fetchAlongside: { _ in },
-                willChange: willChange.map { willChange in { (controller, _) in willChange(controller) } },
+                willChange: willChange,
                 onChange: onChange,
                 didChange: didChange.map { didChange in { (controller, _) in didChange(controller) } })
         }
@@ -200,7 +200,7 @@ public final class FetchedCollection<Fetched> {
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            willChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            willChange: ((FetchedCollection<Fetched>) -> ())? = nil,
             onChange: ((FetchedCollection<Fetched>, Fetched, RequestChange) -> ())? = nil,
             didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
@@ -251,7 +251,7 @@ public final class FetchedCollection<Fetched> {
         {
             trackChanges(
                 fetchAlongside: { _ in },
-                willChange: willChange.flatMap { callback in { (controller, _) in callback(controller) } },
+                willChange: willChange,
                 didChange: didChange.flatMap { callback in { (controller, _) in callback(controller) } })
         }
         
@@ -268,7 +268,7 @@ public final class FetchedCollection<Fetched> {
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
-            willChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil,
+            willChange: ((FetchedCollection<Fetched>) -> ())? = nil,
             didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
@@ -436,7 +436,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         controller: FetchedCollection<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
         itemsAreIdentical: @escaping AnyFetchable<Fetched>.Comparator,
-        willChange: ((_ controller: FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?,
+        willChange: ((_ controller: FetchedCollection<Fetched>) -> ())?,
         onChanges: ((_ controller: FetchedCollection<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
         didChange: ((_ controller: FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
@@ -636,7 +636,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
     func makeFetchAndNotifyChangesFunction<Fetched, T>(
         controller: FetchedCollection<Fetched>,
         fetchAlongside: @escaping (Database) throws -> T,
-        willChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?,
+        willChange: ((FetchedCollection<Fetched>) -> ())?,
         didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
@@ -675,7 +675,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     guard let strongController = controller else { return }
                     
                     // Notify changes
-                    willChange?(strongController, fetchedAlongside)
+                    willChange?(strongController)
                     strongController.fetchedItems = fetchedItems
                     didChange?(strongController, fetchedAlongside)
                 }
