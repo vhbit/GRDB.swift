@@ -24,17 +24,18 @@ class FetchedCollectionTests : GRDBTestCase {
     func testFetchedCollectionFetch() {
         assertNoError {
             let dbPool = try makeDatabasePool()
-            let sql = "SELECT ? AS name, ? AS id UNION ALL SELECT ?, ?"
+            let sql = "SELECT NULL AS ignored, ? AS name, ? AS id UNION ALL SELECT NULL, ?, ?"
             let arguments: StatementArguments = ["a", 1, "b", 2]
-            let sqlRequest = SQLRequest(sql, arguments: arguments)
+            let adapter = SuffixRowAdapter(fromIndex: 1)
+            let sqlRequest = SQLRequest(sql, arguments: arguments, adapter: adapter)
             
-            let valuesFromSQL = try FetchedCollection<String>(dbPool, sql: sql, arguments: arguments)
+            let valuesFromSQL = try FetchedCollection<String>(dbPool, sql: sql, arguments: arguments, adapter: adapter)
             let valuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: String.self))
-            let optionalValuesFromSQL = try FetchedCollection<String?>(dbPool, sql: sql, arguments: arguments)
+            let optionalValuesFromSQL = try FetchedCollection<String?>(dbPool, sql: sql, arguments: arguments, adapter: adapter)
             let optionalValuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Optional<String>.self))
-            let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql, arguments: arguments)
+            let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql, arguments: arguments, adapter: adapter)
             let rowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Row.self))
-            let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql, arguments: arguments)
+            let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql, arguments: arguments, adapter: adapter)
             let recordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: AnyRowConvertible.self))
             
             try valuesFromSQL.fetch()

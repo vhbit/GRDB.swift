@@ -106,17 +106,18 @@ class FetchedCollectionChangesTests: GRDBTestCase {
             try recordsFromRequest.fetch()
             
             // change request
-            let sql2 = "SELECT ? AS name, ? AS id UNION ALL SELECT ?, ?"
+            let sql2 = "SELECT NULL AS ignored, ? AS name, ? AS id UNION ALL SELECT NULL, ?, ?"
             let arguments2: StatementArguments = ["c", 3, "d", 4]
-            let sqlRequest2 = SQLRequest(sql2, arguments: arguments2)
+            let adapter2 = SuffixRowAdapter(fromIndex: 1)
+            let sqlRequest2 = SQLRequest(sql2, arguments: arguments2, adapter: adapter2)
             
-            try valuesFromSQL.setRequest(sql: sql2, arguments: arguments2)
+            try valuesFromSQL.setRequest(sql: sql2, arguments: arguments2, adapter: adapter2)
             try valuesFromRequest.setRequest(sqlRequest2.bound(to: String.self))
-            try optionalValuesFromSQL.setRequest(sql: sql2, arguments: arguments2)
+            try optionalValuesFromSQL.setRequest(sql: sql2, arguments: arguments2, adapter: adapter2)
             try optionalValuesFromRequest.setRequest(sqlRequest2.bound(to: Optional<String>.self))
-            try rowsFromSQL.setRequest(sql: sql2, arguments: arguments2)
+            try rowsFromSQL.setRequest(sql: sql2, arguments: arguments2, adapter: adapter2)
             try rowsFromRequest.setRequest(sqlRequest2.bound(to: Row.self))
-            try recordsFromSQL.setRequest(sql: sql2, arguments: arguments2)
+            try recordsFromSQL.setRequest(sql: sql2, arguments: arguments2, adapter: adapter2)
             try recordsFromRequest.setRequest(sqlRequest2.bound(to: AnyRowConvertible.self))
             
             // collection still contains initial values
