@@ -353,6 +353,7 @@ public final class Database {
         setupDefaultFunctions()
         setupDefaultCollations()
         setupTransactionHooks()
+        installDefaultAuthorizer()
     }
     
     /// This method must be called before database deallocation
@@ -471,6 +472,28 @@ public final class Database {
                 // Next step: updateStatementDidExecute()
             }
         }, dbPointer)
+    }
+    
+    fileprivate func installDefaultAuthorizer() {
+        // https://www.sqlite.org/capi3ref.html#sqlite3_set_authorizer
+        // > When sqlite3_prepare_v2() is used to prepare a statement, the
+        // > statement might be re-prepared during sqlite3_step() due to a
+        // > schema change. Hence, the application should ensure that the
+        // > correct authorizer callback remains in place during the
+        // > sqlite3_step().
+        //
+        // As a matter of fact, without this default authorizer, the truncate
+        // optimization prevents transaction observers from observing
+        // individual deletions.
+        sqlite3_set_authorizer(sqliteConnection, { (_, actionCode, CString1, CString2, CString3, CString4) -> Int32 in
+            if actionCode == SQLITE_DELETE && String(cString: CString1!) != "sqlite_master" {
+                // Prevent [truncate optimization](https://www.sqlite.org/lang_delete.html#truncateopt)
+                // so that transaction observers can observe individual deletions.
+                return SQLITE_IGNORE
+            } else {
+                return SQLITE_OK
+            }
+        }, nil)
     }
 }
 
@@ -1328,6 +1351,8 @@ final class StatementCompilationObserver {
     /// Not nil if a statement is a BEGIN/COMMIT/ROLLBACK/RELEASE transaction/savepoint statement.
     var transactionStatementInfo: UpdateStatement.TransactionStatementInfo?
     
+    var isDropTableStatement = false
+    
     init(_ database: Database) {
         self.database = database
     }
@@ -1339,6 +1364,9 @@ final class StatementCompilationObserver {
             switch actionCode {
             case SQLITE_DROP_TABLE, SQLITE_DROP_TEMP_TABLE, SQLITE_DROP_TEMP_VIEW, SQLITE_DROP_VIEW, SQLITE_DETACH, SQLITE_ALTER_TABLE, SQLITE_DROP_VTABLE, SQLITE_CREATE_INDEX, SQLITE_CREATE_TEMP_INDEX, SQLITE_DROP_INDEX, SQLITE_DROP_TEMP_INDEX:
                 let observer = unsafeBitCast(observerPointer, to: StatementCompilationObserver.self)
+                if actionCode == SQLITE_DROP_TABLE || actionCode == SQLITE_DROP_VTABLE {
+                    observer.isDropTableStatement = true
+                }
                 observer.invalidatesDatabaseSchemaCache = true
             case SQLITE_READ:
                 let observer = unsafeBitCast(observerPointer, to: StatementCompilationObserver.self)
@@ -1348,10 +1376,13 @@ final class StatementCompilationObserver {
                 observer.databaseEventKinds.append(.insert(tableName: String(cString: CString1!)))
             case SQLITE_DELETE:
                 let observer = unsafeBitCast(observerPointer, to: StatementCompilationObserver.self)
-                observer.databaseEventKinds.append(.delete(tableName: String(cString: CString1!)))
-                // Prevent [Truncate Optimization](https://www.sqlite.org/lang_delete.html#truncateopt)
-                // so that transaction observers can observe individual deletions.
-                return SQLITE_IGNORE
+                let tableName = String(cString: CString1!)
+                if tableName != "sqlite_master" && !observer.isDropTableStatement {
+                    observer.databaseEventKinds.append(.delete(tableName: tableName))
+                    // Prevent [truncate optimization](https://www.sqlite.org/lang_delete.html#truncateopt)
+                    // so that transaction observers can observe individual deletions.
+                    return SQLITE_IGNORE
+                }
             case SQLITE_UPDATE:
                 let observer = unsafeBitCast(observerPointer, to: StatementCompilationObserver.self)
                 observer.insertUpdateEventKind(tableName: String(cString: CString1!), columnName: String(cString: CString2!))
@@ -1377,6 +1408,7 @@ final class StatementCompilationObserver {
         databaseEventKinds = []
         invalidatesDatabaseSchemaCache = false
         transactionStatementInfo = nil
+        isDropTableStatement = false
     }
     
     func insertUpdateEventKind(tableName: String, columnName: String) {
@@ -1392,7 +1424,8 @@ final class StatementCompilationObserver {
     }
     
     func stop() {
-        sqlite3_set_authorizer(database.sqliteConnection, nil, nil)
+        // Restore default authorizer
+        database.installDefaultAuthorizer()
     }
 }
 
