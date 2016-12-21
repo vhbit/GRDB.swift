@@ -221,7 +221,7 @@ public final class FetchedCollection<Fetched> {
                     fetchAlongside: fetchAlongside,
                     itemsAreIdentical: itemsAreIdentical,
                     willChange: willChange,
-                    onChanges: onChange.map { onChange in
+                    onChange: onChange.map { onChange in
                         { (controller, changes) in
                             for change in changes {
                                 onChange(controller, controller.unwrap(change.item), change.change)
@@ -437,7 +437,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         fetchAlongside: @escaping (Database) throws -> T,
         itemsAreIdentical: @escaping AnyFetchable<Fetched>.Comparator,
         willChange: ((_ controller: FetchedCollection<Fetched>) -> ())?,
-        onChanges: ((_ controller: FetchedCollection<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
+        onChange: ((_ controller: FetchedCollection<Fetched>, _ changes: [AnyFetchableChange<Fetched>]) -> ())?,
         didChange: ((_ controller: FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())?
         ) -> (RequestObserver<Fetched>) -> ()
     {
@@ -463,7 +463,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
             case .success((fetchedItems: let fetchedItems, fetchedAlongside: let fetchedAlongside, observer: let observer)):
                 // Return if there is no change
                 let tableViewChanges: [AnyFetchableChange<Fetched>]
-                if onChanges != nil {
+                if onChange != nil {
                     // Compute table view changes
                     tableViewChanges = computeChanges(from: observer.items, to: fetchedItems, itemsAreIdentical: itemsAreIdentical)
                     if tableViewChanges.isEmpty { return }
@@ -485,9 +485,9 @@ fileprivate func makeFetchFunction<Fetched, T>(
                     guard let strongController = controller else { return }
                     
                     // Notify changes
-                    willChange?(strongController, fetchedAlongside)
+                    willChange?(strongController)
                     strongController.fetchedItems = fetchedItems
-                    onChanges?(strongController, tableViewChanges)
+                    onChange?(strongController, tableViewChanges)
                     didChange?(strongController, fetchedAlongside)
                 }
             }
