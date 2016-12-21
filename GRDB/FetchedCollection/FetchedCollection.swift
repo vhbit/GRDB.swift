@@ -175,7 +175,7 @@ public final class FetchedCollection<Fetched> {
         ///     - didChange: Invoked after records have been updated.
         public func trackChanges(
             willChange: ((FetchedCollection<Fetched>) -> ())? = nil,
-            onChange: ((FetchedCollection<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            onChange: ((FetchedCollection<Fetched>, Fetched, FetchedCollectionChange) -> ())? = nil,
             didChange: ((FetchedCollection<Fetched>) -> ())? = nil)
         {
             trackChanges(
@@ -201,7 +201,7 @@ public final class FetchedCollection<Fetched> {
         public func trackChanges<T>(
             fetchAlongside: @escaping (Database) throws -> T,
             willChange: ((FetchedCollection<Fetched>) -> ())? = nil,
-            onChange: ((FetchedCollection<Fetched>, Fetched, RequestChange) -> ())? = nil,
+            onChange: ((FetchedCollection<Fetched>, Fetched, FetchedCollectionChange) -> ())? = nil,
             didChange: ((FetchedCollection<Fetched>, _ fetchedAlongside: T) -> ())? = nil)
         {
             // If some changes are currently processed, make sure they are
@@ -777,7 +777,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
             }
         }
         
-        var change: RequestChange {
+        var change: FetchedCollectionChange {
             switch self {
             case .insertion(item: _, indexPath: let indexPath):
                 return .insertion(indexPath: indexPath)
@@ -813,7 +813,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
     ///
     /// The move and update events hold a *changes* dictionary. Its keys are column
     /// names, and values the old values that have been changed.
-    public enum RequestChange {
+    public enum FetchedCollectionChange {
         
         /// An insertion event, at given indexPath.
         case insertion(indexPath: IndexPath)
@@ -832,7 +832,7 @@ fileprivate func makeFetchFunction<Fetched, T>(
         case update(indexPath: IndexPath, changes: [String: DatabaseValue])
     }
     
-    extension RequestChange: CustomStringConvertible {
+    extension FetchedCollectionChange: CustomStringConvertible {
         
         /// A textual representation of `self`.
         public var description: String {

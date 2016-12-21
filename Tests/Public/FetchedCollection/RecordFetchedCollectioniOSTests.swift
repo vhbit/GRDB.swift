@@ -9,7 +9,7 @@
     #endif
     
     private class ChangesRecorder<Record: RowConvertible> {
-        var changes: [(record: Record, change: RequestChange)] = []
+        var changes: [(record: Record, change: FetchedCollectionChange)] = []
         var recordsBeforeChanges: [Record]!
         var recordsonFirstChange: [Record]!
         var transactionExpectation: XCTestExpectation? {
@@ -25,7 +25,7 @@
         }
         
         /// The default implementation does nothing.
-        func collection(_ collection: FetchedCollection<Record>, didChangeRecord record: Record, withChange change: RequestChange) {
+        func collection(_ collection: FetchedCollection<Record>, didChangeRecord record: Record, withChange change: FetchedCollectionChange) {
             if recordsonFirstChange == nil {
                 recordsonFirstChange = Array(collection)
             }
@@ -454,7 +454,7 @@
                     case D(String, Int) // delete string at index
                     case U(String, Int, String) // update string at index with changed string
                     
-                    func match(name: String, change: RequestChange) -> Bool {
+                    func match(name: String, change: FetchedCollectionChange) -> Bool {
                         switch self {
                         case .I(let s, let i):
                             switch change {

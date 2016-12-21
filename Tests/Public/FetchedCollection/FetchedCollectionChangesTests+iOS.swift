@@ -13,7 +13,7 @@
         var elementsBeforeChanges: [Fetched]!
         var elementsAfterChanges: [Fetched]!
         var fetchedAlongsideAfterChanges: T?
-        var changes: [(change: RequestChange, value: Fetched)] = []
+        var changes: [(change: FetchedCollectionChange, value: Fetched)] = []
         
         var expectation: XCTestExpectation? {
             didSet {
@@ -28,7 +28,7 @@
             elementsBeforeChanges = Array(collection)
         }
         
-        func append(_ change: RequestChange, on value: Fetched) {
+        func append(_ change: FetchedCollectionChange, on value: Fetched) {
             changes.append((change: change, value: value))
         }
         
