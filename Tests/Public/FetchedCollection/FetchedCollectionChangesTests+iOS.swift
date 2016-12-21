@@ -1,13 +1,13 @@
 #if os(iOS)
     
     import XCTest
-#if USING_SQLCIPHER
-    import GRDBCipher
+    #if USING_SQLCIPHER
+        import GRDBCipher
     #elseif USING_CUSTOMSQLITE
-    import GRDBCustomSQLite
+        import GRDBCustomSQLite
     #else
-    import GRDB
-#endif
+        import GRDB
+    #endif
     
     private class ChangesRecorder<Fetched, T> {
         var elementsBeforeChanges: [Fetched]!

@@ -83,6 +83,15 @@ class FetchedCollectionTests : GRDBTestCase {
             try recordsFromSQL.fetch()
             try recordsFromRequest.fetch()
             
+            XCTAssertFalse(valuesFromSQL.isEmpty)
+            XCTAssertFalse(valuesFromRequest.isEmpty)
+            XCTAssertFalse(optionalValuesFromSQL.isEmpty)
+            XCTAssertFalse(optionalValuesFromRequest.isEmpty)
+            XCTAssertFalse(rowsFromSQL.isEmpty)
+            XCTAssertFalse(rowsFromRequest.isEmpty)
+            XCTAssertFalse(recordsFromSQL.isEmpty)
+            XCTAssertFalse(recordsFromRequest.isEmpty)
+            
             XCTAssertEqual(valuesFromSQL.count, 2)
             XCTAssertEqual(valuesFromRequest.count, 2)
             XCTAssertEqual(optionalValuesFromSQL.count, 2)
@@ -136,6 +145,68 @@ class FetchedCollectionTests : GRDBTestCase {
             XCTAssertEqual(Array(rowsFromRequest.reversed()), [["name": "b", "id": 2], ["name": "a", "id": 1]])
             XCTAssertEqual(Array(recordsFromSQL.reversed()), [AnyRowConvertible(row: ["name": "b", "id": 2]), AnyRowConvertible(row: ["name": "a", "id": 1])])
             XCTAssertEqual(Array(recordsFromRequest.reversed()), [AnyRowConvertible(row: ["name": "b", "id": 2]), AnyRowConvertible(row: ["name": "a", "id": 1])])
+        }
+    }
+    
+    func testEmptyFetchedCollection() {
+        assertNoError {
+            let dbPool = try makeDatabasePool()
+            let sql = "SELECT 'ignored' WHERE 0"
+            let sqlRequest = SQLRequest(sql)
+            
+            let valuesFromSQL = try FetchedCollection<String>(dbPool, sql: sql)
+            let valuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: String.self))
+            let optionalValuesFromSQL = try FetchedCollection<String?>(dbPool, sql: sql)
+            let optionalValuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Optional<String>.self))
+            let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql)
+            let rowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Row.self))
+            let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql)
+            let recordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: AnyRowConvertible.self))
+            
+            try valuesFromSQL.fetch()
+            try valuesFromRequest.fetch()
+            try optionalValuesFromSQL.fetch()
+            try optionalValuesFromRequest.fetch()
+            try rowsFromSQL.fetch()
+            try rowsFromRequest.fetch()
+            try recordsFromSQL.fetch()
+            try recordsFromRequest.fetch()
+            
+            XCTAssertTrue(valuesFromSQL.isEmpty)
+            XCTAssertTrue(valuesFromRequest.isEmpty)
+            XCTAssertTrue(optionalValuesFromSQL.isEmpty)
+            XCTAssertTrue(optionalValuesFromRequest.isEmpty)
+            XCTAssertTrue(rowsFromSQL.isEmpty)
+            XCTAssertTrue(rowsFromRequest.isEmpty)
+            XCTAssertTrue(recordsFromSQL.isEmpty)
+            XCTAssertTrue(recordsFromRequest.isEmpty)
+            
+            XCTAssertEqual(valuesFromSQL.count, 0)
+            XCTAssertEqual(valuesFromRequest.count, 0)
+            XCTAssertEqual(optionalValuesFromSQL.count, 0)
+            XCTAssertEqual(optionalValuesFromRequest.count, 0)
+            XCTAssertEqual(rowsFromSQL.count, 0)
+            XCTAssertEqual(rowsFromRequest.count, 0)
+            XCTAssertEqual(recordsFromSQL.count, 0)
+            XCTAssertEqual(recordsFromRequest.count, 0)
+            
+            XCTAssertEqual(valuesFromSQL.startIndex, 0)
+            XCTAssertEqual(valuesFromRequest.startIndex, 0)
+            XCTAssertEqual(optionalValuesFromSQL.startIndex, 0)
+            XCTAssertEqual(optionalValuesFromRequest.startIndex, 0)
+            XCTAssertEqual(rowsFromSQL.startIndex, 0)
+            XCTAssertEqual(rowsFromRequest.startIndex, 0)
+            XCTAssertEqual(recordsFromSQL.startIndex, 0)
+            XCTAssertEqual(recordsFromRequest.startIndex, 0)
+            
+            XCTAssertEqual(valuesFromSQL.endIndex, 0)
+            XCTAssertEqual(valuesFromRequest.endIndex, 0)
+            XCTAssertEqual(optionalValuesFromSQL.endIndex, 0)
+            XCTAssertEqual(optionalValuesFromRequest.endIndex, 0)
+            XCTAssertEqual(rowsFromSQL.endIndex, 0)
+            XCTAssertEqual(rowsFromRequest.endIndex, 0)
+            XCTAssertEqual(recordsFromSQL.endIndex, 0)
+            XCTAssertEqual(recordsFromRequest.endIndex, 0)
         }
     }
     
