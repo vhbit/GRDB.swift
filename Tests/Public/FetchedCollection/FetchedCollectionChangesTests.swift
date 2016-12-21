@@ -290,6 +290,8 @@ class FetchedCollectionChangesTests: GRDBTestCase {
     }
     
     func testTransactionChanges() {
+        // Here we test delete, insert, update, and *also* that several
+        // transactions can be chained and individually observed.
         assertNoError {
             let dbPool = try makeDatabasePool()
             try dbPool.write { db in
@@ -1356,4 +1358,14 @@ class FetchedCollectionChangesTests: GRDBTestCase {
         }
     }
     
+    func testChangesAreNotReReflectedUntilFetchAndTrackingIsSet() {
+        // TODO: test that FetchedCollection contents do not eventually change
+        // after a database change. The difficulty of this test lies in the
+        // "eventually" word.
+    }
+    
+    func testExternalChange() {
+        // TODO: test that callbacks are not called after a change in some
+        // external table or some unused column.
+    }
 }
