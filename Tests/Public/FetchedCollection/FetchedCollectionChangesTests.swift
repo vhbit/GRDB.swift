@@ -11,11 +11,18 @@ private class ChangesRecorder<Fetched, T> {
     var elementsBeforeChanges: [Fetched]!
     var elementsAfterChanges: [Fetched]!
     var fetchedAlongsideAfterChanges: T?
+    var error: Error?
     var expectation: XCTestExpectation? {
         didSet {
             elementsBeforeChanges = nil
             elementsAfterChanges = nil
             fetchedAlongsideAfterChanges = nil
+        }
+    }
+    
+    func trackErrors(in collection: FetchedCollection<Fetched>) {
+        collection.trackErrors { (collection, error) in
+            self.collection(collection, didFailWith: error)
         }
     }
     
@@ -46,6 +53,11 @@ private class ChangesRecorder<Fetched, T> {
         fetchedAlongsideAfterChanges = fetchedAlongside
         expectation?.fulfill()
     }
+    
+    func collection(_ collection: FetchedCollection<Fetched>, didFailWith error: Error) {
+        self.error = error
+        expectation?.fulfill()
+    }
 }
 
 private struct AnyRowConvertible: RowConvertible, Equatable {
@@ -62,6 +74,103 @@ private struct AnyRowConvertible: RowConvertible, Equatable {
 
 class FetchedCollectionChangesTests: GRDBTestCase {
     
+    func testChangesError() {
+        assertNoError {
+            let dbPool = try makeDatabasePool()
+            try dbPool.write { db in
+                try db.create(table: "table1") { t in
+                    t.column("id", .integer).primaryKey()
+                    t.column("name", .text)
+                }
+                try db.execute("INSERT INTO table1 (id, name) VALUES (?, ?)", arguments: [1, "a"])
+            }
+            
+            let sql = "SELECT name, id FROM table1 ORDER BY id"
+            let sqlRequest = SQLRequest(sql)
+            
+            let valuesFromSQL = try FetchedCollection<String>(dbPool, sql: sql)
+            let valuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: String.self))
+            let optionalValuesFromSQL = try FetchedCollection<String?>(dbPool, sql: sql)
+            let optionalValuesFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Optional<String>.self))
+            let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql)
+            let rowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Row.self))
+            let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql)
+            let recordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: AnyRowConvertible.self))
+            
+            try valuesFromSQL.fetch()
+            try valuesFromRequest.fetch()
+            try optionalValuesFromSQL.fetch()
+            try optionalValuesFromRequest.fetch()
+            try rowsFromSQL.fetch()
+            try rowsFromRequest.fetch()
+            try recordsFromSQL.fetch()
+            try recordsFromRequest.fetch()
+            
+            let valuesFromSQLChangesRecorder = ChangesRecorder<String, Void>()
+            let valuesFromRequestChangesRecorder = ChangesRecorder<String, Void>()
+            let optionalValuesFromSQLChangesRecorder = ChangesRecorder<String?, Void>()
+            let optionalValuesFromRequestChangesRecorder = ChangesRecorder<String?, Void>()
+            let rowsFromSQLChangesRecorder = ChangesRecorder<Row, Void>()
+            let rowsFromRequestChangesRecorder = ChangesRecorder<Row, Void>()
+            let recordsFromSQLChangesRecorder = ChangesRecorder<AnyRowConvertible, Void>()
+            let recordsFromRequestChangesRecorder = ChangesRecorder<AnyRowConvertible, Void>()
+            
+            valuesFromSQLChangesRecorder.trackChanges(in: valuesFromSQL)
+            valuesFromRequestChangesRecorder.trackChanges(in: valuesFromRequest)
+            optionalValuesFromSQLChangesRecorder.trackChanges(in: optionalValuesFromSQL)
+            optionalValuesFromRequestChangesRecorder.trackChanges(in: optionalValuesFromRequest)
+            rowsFromSQLChangesRecorder.trackChanges(in: rowsFromSQL)
+            rowsFromRequestChangesRecorder.trackChanges(in: rowsFromRequest)
+            recordsFromSQLChangesRecorder.trackChanges(in: recordsFromSQL)
+            recordsFromRequestChangesRecorder.trackChanges(in: recordsFromRequest)
+            
+            valuesFromSQLChangesRecorder.trackErrors(in: valuesFromSQL)
+            valuesFromRequestChangesRecorder.trackErrors(in: valuesFromRequest)
+            optionalValuesFromSQLChangesRecorder.trackErrors(in: optionalValuesFromSQL)
+            optionalValuesFromRequestChangesRecorder.trackErrors(in: optionalValuesFromRequest)
+            rowsFromSQLChangesRecorder.trackErrors(in: rowsFromSQL)
+            rowsFromRequestChangesRecorder.trackErrors(in: rowsFromRequest)
+            recordsFromSQLChangesRecorder.trackErrors(in: recordsFromSQL)
+            recordsFromRequestChangesRecorder.trackErrors(in: recordsFromRequest)
+            
+            // Perform a change that triggers an error
+            try dbPool.writeInTransaction { db in
+                try db.execute("DELETE FROM table1")
+                try db.drop(table: "table1")
+                return .commit
+            }
+            
+            valuesFromSQLChangesRecorder.expectation = expectation(description: "valuesFromSQL")
+            valuesFromRequestChangesRecorder.expectation = expectation(description: "valuesFromRequest")
+            optionalValuesFromSQLChangesRecorder.expectation = expectation(description: "optionalValuesFromSQL")
+            optionalValuesFromRequestChangesRecorder.expectation = expectation(description: "optionalValuesFromRequest")
+            rowsFromSQLChangesRecorder.expectation = expectation(description: "rowsFromSQL")
+            rowsFromRequestChangesRecorder.expectation = expectation(description: "rowsFromRequest")
+            recordsFromSQLChangesRecorder.expectation = expectation(description: "recordsFromSQL")
+            recordsFromRequestChangesRecorder.expectation = expectation(description: "recordsFromRequest")
+            waitForExpectations(timeout: 1, handler: nil)
+            
+            func test(_ error: Error?) {
+                if let error = error as? DatabaseError {
+                    XCTAssertEqual(error.code, 1) // SQLITE_ERROR
+                    XCTAssertEqual(error.message, "no such table: table1")
+                    XCTAssertEqual(error.sql!, "SELECT name, id FROM table1 ORDER BY id")
+                    XCTAssertEqual(error.description, "SQLite error 1 with statement `SELECT name, id FROM table1 ORDER BY id`: no such table: table1")
+                } else {
+                    XCTFail("Expected DatabaseError")
+                }
+            }
+            test(valuesFromSQLChangesRecorder.error)
+            test(valuesFromRequestChangesRecorder.error)
+            test(optionalValuesFromSQLChangesRecorder.error)
+            test(optionalValuesFromRequestChangesRecorder.error)
+            test(rowsFromSQLChangesRecorder.error)
+            test(rowsFromRequestChangesRecorder.error)
+            test(recordsFromSQLChangesRecorder.error)
+            test(recordsFromRequestChangesRecorder.error)
+        }
+    }
+
     func testSetRequestChanges() {
         assertNoError {
             let dbPool = try makeDatabasePool()
