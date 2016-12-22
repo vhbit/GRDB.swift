@@ -188,10 +188,17 @@
                 let sql = "SELECT name, id FROM table1 ORDER BY id"
                 let sqlRequest = SQLRequest(sql)
                 
+                let rowComparator = { (row1: Row, row2: Row) in
+                    (row1.value(named: "id") as DatabaseValue) == (row2.value(named: "id") as DatabaseValue)
+                }
                 let rowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql)
                 let rowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Row.self))
+                let identifiedRowsFromSQL = try FetchedCollection<Row>(dbPool, sql: sql, isSameElement: rowComparator)
+                let identifiedRowsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: Row.self), isSameElement: rowComparator)
                 let recordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql)
                 let recordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: AnyRowConvertible.self))
+                let identifiedRecordsFromSQL = try FetchedCollection<AnyRowConvertible>(dbPool, sql: sql, isSameElement: { (record1, record2) in rowComparator(record1.row, record2.row) })
+                let identifiedRecordsFromRequest = try FetchedCollection(dbPool, request: sqlRequest.bound(to: AnyRowConvertible.self), isSameElement: { (record1, record2) in rowComparator(record1.row, record2.row) })
                 
                 let rowsFromSQLChangesRecorder = ChangesRecorder<Row, Void>()
                 let rowsFromRequestChangesRecorder = ChangesRecorder<Row, Void>()

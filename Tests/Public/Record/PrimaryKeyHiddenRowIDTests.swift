@@ -657,15 +657,14 @@ class PrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
             
             let expectation = self.expectation(description: "expectation")
-            let persons: FetchedCollection<Person>
+            let persons = try FetchedCollection(dbQueue, request: Person.all())
             #if os(iOS)
-                persons = try FetchedCollection(dbQueue, request: Person.all(), compareRecordsByPrimaryKey: true)
                 var update = false
                 persons.trackChanges(
                     onChange: { (_, _, change) in
                         switch change {
                         case .update:
-                            update = true
+                            update = true   // identification by hidden rowid primary key has succeeded
                         default:
                             break
                         }
@@ -674,7 +673,6 @@ class PrimaryKeyHiddenRowIDTests : GRDBTestCase {
                         expectation.fulfill()
                 })
             #else
-                persons = try FetchedCollection(dbQueue, request: Person.all())
                 persons.trackChanges { _ in
                     expectation.fulfill()
                 }

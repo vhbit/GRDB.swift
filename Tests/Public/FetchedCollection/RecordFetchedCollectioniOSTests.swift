@@ -102,7 +102,7 @@
                 }
                 
                 let request = Person.all()
-                let persons = try FetchedCollection(dbQueue, request: request, compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: request)
                 try persons.fetch()
                 XCTAssertEqual(persons.sections.count, 1)
                 XCTAssertEqual(persons.sections[0].count, 1)
@@ -130,7 +130,7 @@
         func testSimpleInsert() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("id")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("id")))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -190,7 +190,7 @@
         func testSimpleUpdate() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("id")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("id")))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -269,7 +269,7 @@
         func testSimpleDelete() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("id")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("id")))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -336,7 +336,7 @@
         func testSimpleMove() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -391,8 +391,7 @@
                         "FROM persons " +
                         "LEFT JOIN books ON books.ownerId = persons.id " +
                         "GROUP BY persons.id " +
-                        "ORDER BY persons.name"),
-                    compareRecordsByPrimaryKey: true)
+                        "ORDER BY persons.name"))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -440,7 +439,7 @@
         func testComplexChanges() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -573,7 +572,7 @@
         func testRequestChange() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")))
                 let recorder = ChangesRecorder<Person>()
                 persons.trackChanges(
                     willChange: { recorder.collectionWillChange($0) },
@@ -648,7 +647,7 @@
         func testSetCallbacksAfterUpdate() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")))
                 let recorder = ChangesRecorder<Person>()
                 try persons.fetch()
                 
@@ -685,7 +684,7 @@
         func testTrailingClosureCallback() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
-                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")), compareRecordsByPrimaryKey: true)
+                let persons = try FetchedCollection(dbQueue, request: Person.order(Column("name")))
                 var fetchedPersons: [Person] = []
                 try persons.fetch()
                 

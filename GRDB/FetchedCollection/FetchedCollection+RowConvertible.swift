@@ -198,14 +198,15 @@ extension FetchedCollection where Fetched: RowConvertible {
             sql: String,
             arguments: StatementArguments? = nil,
             adapter: RowAdapter? = nil,
-            queue: DispatchQueue = .main,
-            compareRecordsByPrimaryKey: Bool) throws
+            queue: DispatchQueue = .main) throws
         {
+            let rowComparator = try databaseWriter.read { db in try Fetched.primaryKeyRowComparator(db) }
             try self.init(
                 databaseWriter,
                 request: SQLRequest(sql, arguments: arguments, adapter: adapter).bound(to: Fetched.self),
                 queue: queue,
-                compareRecordsByPrimaryKey: compareRecordsByPrimaryKey)
+                unwrap: { $0.unwrap() },
+                itemsAreIdentical: { rowComparator($0.row, $1.row) })
         }
         
         /// Creates a fetched records controller initialized from a fetch request.
@@ -233,25 +234,16 @@ extension FetchedCollection where Fetched: RowConvertible {
         public convenience init<Request>(
             _ databaseWriter: DatabaseWriter,
             request: Request,
-            queue: DispatchQueue = .main,
-            compareRecordsByPrimaryKey: Bool) throws
+            queue: DispatchQueue = .main) throws
             where Request: TypedRequest, Request.Fetched == Fetched
         {
-            if compareRecordsByPrimaryKey {
-                let rowComparator = try databaseWriter.read { db in try Fetched.primaryKeyRowComparator(db) }
-                try self.init(
-                    databaseWriter,
-                    request: request,
-                    queue: queue,
-                    unwrap: { $0.unwrap() },
-                    itemsAreIdentical: { rowComparator($0.row, $1.row) })
-            } else {
-                try self.init(
-                    databaseWriter,
-                    request: request,
-                    queue: queue,
-                    unwrap: { $0.unwrap() })
-            }
+            let rowComparator = try databaseWriter.read { db in try Fetched.primaryKeyRowComparator(db) }
+            try self.init(
+                databaseWriter,
+                request: request,
+                queue: queue,
+                unwrap: { $0.unwrap() },
+                itemsAreIdentical: { rowComparator($0.row, $1.row) })
         }
     }
 #endif

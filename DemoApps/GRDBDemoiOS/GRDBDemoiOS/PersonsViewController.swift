@@ -12,8 +12,7 @@ class PersonsViewController: UITableViewController {
             editButtonItem
         ]
         
-        let request = personsSortedByScore
-        persons = try! FetchedCollection(dbQueue, request: request, compareRecordsByPrimaryKey: true)
+        persons = try! FetchedCollection(dbQueue, request: personsSortedByScore)
         persons.trackChanges(
             willChange: { [unowned self] _ in
                 self.tableView.beginUpdates()
