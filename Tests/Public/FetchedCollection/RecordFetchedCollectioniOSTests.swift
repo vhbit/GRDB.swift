@@ -114,19 +114,6 @@
             }
         }
         
-        func testEmptyRequestGivesOneSection() {
-            assertNoError {
-                let dbQueue = try makeDatabaseQueue()
-                let request = Person.all()
-                let persons = try FetchedCollection(dbQueue, request: request)
-                try persons.fetch()
-                XCTAssertEqual(persons.count, 0)
-                
-                // Just like NSFetchedResultsCollection
-                XCTAssertEqual(persons.sections.count, 1)
-            }
-        }
-        
         func testSimpleInsert() {
             assertNoError {
                 let dbQueue = try makeDatabaseQueue()
