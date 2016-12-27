@@ -103,4 +103,37 @@ class SelectStatementTests : GRDBTestCase {
             }
         }
     }
+    
+    func testCachedSelectStatementStepFailure() {
+        assertNoError {
+            let dbQueue = try makeDatabaseQueue()
+            var needsThrow = false
+            dbQueue.add(function: DatabaseFunction("bomb", argumentCount: 0, pure: false) { _ in
+                if needsThrow {
+                    throw DatabaseError(message: "boom")
+                }
+                return "success"
+            })
+            try dbQueue.inDatabase { db in
+                let sql = "SELECT bomb()"
+                
+                needsThrow = false
+                XCTAssertEqual(try String.fetchAll(db.cachedSelectStatement(sql)), ["success"])
+                
+                do {
+                    needsThrow = true
+                    _ = try String.fetchAll(db.cachedSelectStatement(sql))
+                    XCTFail()
+                } catch let error as DatabaseError {
+                    XCTAssertEqual(error.code, 1)
+                    XCTAssertEqual(error.message!, "boom")
+                    XCTAssertEqual(error.sql!, sql)
+                    XCTAssertEqual(error.description, "SQLite error 1 with statement `\(sql)`: boom")
+                }
+                
+                needsThrow = false
+                XCTAssertEqual(try String.fetchAll(db.cachedSelectStatement(sql)), ["success"])
+            }
+        }
+    }
 }

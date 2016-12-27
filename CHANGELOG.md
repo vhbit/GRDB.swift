@@ -8,6 +8,15 @@ Release Notes
 - `Row` adopts the Hashable protocol
 
 
+## 0.99.2
+
+Released December 22, 2016
+
+**Fixed**
+
+- `Database.cachedSelectStatement()` no longer returns a statement that can not be reused because it has already failed. 
+
+
 ## 0.99.1
 
 Released December 21, 2016
