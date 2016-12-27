@@ -9,11 +9,42 @@
         import GRDB
     #endif
     
+    extension FetchedCollectionChange : Equatable {
+        public static func == (lhs: FetchedCollectionChange, rhs: FetchedCollectionChange) -> Bool {
+            switch (lhs, rhs) {
+            case (.insertion(let lIndexPath), .insertion(let rIndexPath)):
+                return lIndexPath == rIndexPath
+            case (.deletion(let lIndexPath), .deletion(let rIndexPath)):
+                return lIndexPath == rIndexPath
+            case (.move(let lIndexPath, let lNewIndexPath, let lChanges), .move(let rIndexPath, let rNewIndexPath, let rChanges)):
+                return lIndexPath == rIndexPath && lNewIndexPath == rNewIndexPath && lChanges == rChanges
+            case (.update(let lIndexPath, let lChanges), .update(let rIndexPath, let rChanges)):
+                return lIndexPath == rIndexPath && lChanges == rChanges
+            default:
+                return false
+            }
+        }
+    }
+    
+    private struct RecordedChange<Fetched> {
+        let change: FetchedCollectionChange
+        let value: Fetched
+    }
+    
+    private func ==<Fetched>(lhs: [RecordedChange<Fetched>], rhs: [RecordedChange<Fetched>]) -> Bool where Fetched: Equatable {
+        guard lhs.count == rhs.count else { return false }
+        for (lhs, rhs) in zip(lhs, rhs) {
+            if lhs.change != rhs.change { return false }
+            if lhs.value != rhs.value { return false }
+        }
+        return true
+    }
+    
     private class ChangesRecorder<Fetched, T> {
         var elementsBeforeChanges: [Fetched]!
         var elementsAfterChanges: [Fetched]!
         var fetchedAlongsideAfterChanges: T?
-        var changes: [(change: FetchedCollectionChange, value: Fetched)] = []
+        var changes: [RecordedChange<Fetched>] = []
         
         var expectation: XCTestExpectation? {
             didSet {
@@ -26,10 +57,6 @@
         
         func collectionWillChange(_ collection: FetchedCollection<Fetched>) {
             elementsBeforeChanges = Array(collection)
-        }
-        
-        func append(_ change: FetchedCollectionChange, on value: Fetched) {
-            changes.append((change: change, value: value))
         }
         
         func collectionDidChange(_ collection: FetchedCollection<Fetched>) {
@@ -48,7 +75,7 @@
         func trackChanges(in collection: FetchedCollection<Fetched>) {
             collection.trackChanges(
                 willChange: { collection in self.collectionWillChange(collection) },
-                onChange: { (collection, value, change) in self.append(change, on: value) },
+                onChange: { (collection, value, change) in self.changes.append(RecordedChange(change: change, value: value)) },
                 didChange: { collection in self.collectionDidChange(collection) })
         }
         
@@ -56,7 +83,7 @@
             collection.trackChanges(
                 fetchAlongside: fetchAlongside,
                 willChange: { collection in self.collectionWillChange(collection) },
-                onChange: { (collection, value, change) in self.append(change, on: value) },
+                onChange: { (collection, value, change) in self.changes.append(RecordedChange(change: change, value: value)) },
                 didChange: { (collection, fetchedAlonside) in self.collectionDidChange(collection, fetchedAlongside: fetchedAlonside) })
         }
         
@@ -66,7 +93,7 @@
         func trackChanges(in collection: FetchedCollection<Fetched>) {
             collection.trackChanges(
                 willChange: { collection in self.collectionWillChange(collection) },
-                onChange: { (collection, value, change) in self.append(change, on: value) },
+                onChange: { (collection, value, change) in self.changes.append(RecordedChange(change: change, value: value)) },
                 didChange: { collection in self.collectionDidChange(collection) })
         }
         
@@ -74,7 +101,7 @@
             collection.trackChanges(
                 fetchAlongside: fetchAlongside,
                 willChange: { collection in self.collectionWillChange(collection) },
-                onChange: { (collection, value, change) in self.append(change, on: value) },
+                onChange: { (collection, value, change) in self.changes.append(RecordedChange(change: change, value: value)) },
                 didChange: { (collection, fetchedAlonside) in self.collectionDidChange(collection, fetchedAlongside: fetchedAlonside) })
         }
     }
@@ -224,6 +251,28 @@
                     XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                }
             }
         }
         
@@ -346,6 +395,32 @@
                     XCTAssertEqual(identifiedRecordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(identifiedRecordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2])])
+                    XCTAssertTrue(identifiedRowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2])])
+                    XCTAssertTrue(identifiedRowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2]))])
+                    XCTAssertTrue(identifiedRecordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2]))])
+                    XCTAssertTrue(identifiedRecordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2]))])
+                }
                 
                 // transaction: insert
                 try dbPool.writeInTransaction { db in
@@ -411,6 +486,32 @@
                     XCTAssertEqual(identifiedRecordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(identifiedRecordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(identifiedRowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(identifiedRowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(identifiedRecordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(identifiedRecordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                }
                 
                 // transaction: update
                 try dbPool.writeInTransaction { db in
@@ -474,6 +575,28 @@
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(identifiedRecordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(identifiedRecordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "e", "id": 3])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "e", "id": 3])])
+                    XCTAssertTrue(identifiedRowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .update(indexPath: IndexPath(row: 0, section: 0), changes: ["name": "c".databaseValue]), value: ["name": "e", "id": 3])])
+                    XCTAssertTrue(identifiedRowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .update(indexPath: IndexPath(row: 0, section: 0), changes: ["name": "c".databaseValue]), value: ["name": "e", "id": 3])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "e", "id": 3]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "e", "id": 3]))])
+                    XCTAssertTrue(identifiedRecordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .update(indexPath: IndexPath(row: 0, section: 0), changes: ["name": "c".databaseValue]), value: AnyRowConvertible(row: ["name": "e", "id": 3]))])
+                    XCTAssertTrue(identifiedRecordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .update(indexPath: IndexPath(row: 0, section: 0), changes: ["name": "c".databaseValue]), value: AnyRowConvertible(row: ["name": "e", "id": 3]))])
                 }
             }
         }
@@ -551,6 +674,28 @@
                     XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                }
             }
         }
         
@@ -627,6 +772,28 @@
                     XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                }
             }
         }
         
@@ -702,6 +869,28 @@
                     XCTAssertEqual(rowsFromRequestChangesRecorder.elementsAfterChanges, expectedRows)
                     XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "c", "id": 3]),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3])),
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
                 }
             }
         }
@@ -789,6 +978,20 @@
                     XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "c", "id": 3])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "c", "id": 3])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3]))])
+                }
                 
                 // modify table2
                 try dbPool.writeInTransaction { db in
@@ -833,6 +1036,20 @@
                     XCTAssertEqual(rowsFromRequestChangesRecorder.elementsAfterChanges, expectedRows)
                     XCTAssertEqual(recordsFromSQLChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(recordsFromRequestChangesRecorder.elementsAfterChanges, expectedRows.map { AnyRowConvertible(row: $0) })
+                }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "b", "id": 2]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "d", "id": 4])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "d", "id": 4]))])
                 }
             }
         }
@@ -899,6 +1116,20 @@
                     XCTAssertEqual(Array(recordsFromSQL), expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
                 }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "b", "id": 2])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "a", "id": 1]),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: ["name": "b", "id": 2])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .deletion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "a", "id": 1])),
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 0, section: 0)), value: AnyRowConvertible(row: ["name": "b", "id": 2]))])
+                }
                 
                 // modify table2
                 try dbPool.writeInTransaction { db in
@@ -919,6 +1150,16 @@
                     XCTAssertEqual(Array(rowsFromRequest), expectedRows)
                     XCTAssertEqual(Array(recordsFromSQL), expectedRows.map { AnyRowConvertible(row: $0) })
                     XCTAssertEqual(Array(recordsFromRequest), expectedRows.map { AnyRowConvertible(row: $0) })
+                }
+                do {
+                    XCTAssertTrue(rowsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "c", "id": 3])])
+                    XCTAssertTrue(rowsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: ["name": "c", "id": 3])])
+                    XCTAssertTrue(recordsFromSQLChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3]))])
+                    XCTAssertTrue(recordsFromRequestChangesRecorder.changes == [
+                        RecordedChange(change: .insertion(indexPath: IndexPath(row: 1, section: 0)), value: AnyRowConvertible(row: ["name": "c", "id": 3]))])
                 }
             }
         }
