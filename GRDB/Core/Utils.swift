@@ -136,8 +136,18 @@ final class ReadWriteBox<T> {
 ///     got 1
 ///     got 3
 final class Pool<T> {
+    private class Item {
+        let element: T
+        var available: Bool
+        
+        init(element: T, available: Bool) {
+            self.element = element
+            self.available = available
+        }
+    }
+    
     var makeElement: (() throws -> T)?
-    private var items: [PoolItem<T>] = []
+    private var items: [Item] = []
     private let queue: DispatchQueue         // protects items
     private let semaphore: DispatchSemaphore // limits the number of elements
     
@@ -151,7 +161,7 @@ final class Pool<T> {
     /// Returns a tuple (element, releaseElement())
     /// Client MUST call releaseElement() after the element has been used.
     func get() throws -> (T, () -> ()) {
-        var item: PoolItem<T>! = nil
+        var item: Item! = nil
         _ = semaphore.wait(timeout: .distantFuture)
         do {
             try queue.sync {
@@ -159,7 +169,7 @@ final class Pool<T> {
                     item = availableItem
                     item.available = false
                 } else {
-                    item = try PoolItem(element: makeElement!(), available: false)
+                    item = try Item(element: makeElement!(), available: false)
                     items.append(item)
                 }
             }
@@ -206,16 +216,6 @@ final class Pool<T> {
             items = []
             try block()
         }
-    }
-}
-
-private class PoolItem<T> {
-    let element: T
-    var available: Bool
-    
-    init(element: T, available: Bool) {
-        self.element = element
-        self.available = available
     }
 }
 
