@@ -220,3 +220,139 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
         return try fetchOne(db, SQLRequest(sql, arguments: arguments, adapter: adapter))
     }
 }
+
+extension Optional where Wrapped: DatabaseValueConvertible & StatementColumnConvertible {
+    
+    // MARK: Fetching From SelectStatement
+    
+    /// Returns a cursor over optional values fetched from a prepared statement.
+    ///
+    ///     let statement = try db.makeSelectStatement("SELECT name FROM ...")
+    ///     let names = try Optional<String>.fetchCursor(statement) // DatabaseCursor<String?>
+    ///     while let name = try names.next() { // String?
+    ///         ...
+    ///     }
+    ///
+    /// If the database is modified during the cursor iteration, the remaining
+    /// elements are undefined.
+    ///
+    /// The cursor must be iterated in a protected dispath queue.
+    ///
+    /// - parameters:
+    ///     - statement: The statement to run.
+    ///     - arguments: Optional statement arguments.
+    ///     - adapter: Optional RowAdapter
+    /// - returns: A cursor over fetched optional values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public static func fetchCursor(_ statement: SelectStatement, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil) throws -> DatabaseCursor<Wrapped?> {
+        // We'll read from leftmost column at index 0, unless adapter mangles columns
+        let columnIndex = try Int32(adapter?.baseColumnIndex(atIndex: 0, layout: statement) ?? 0)
+        let sqliteStatement = statement.sqliteStatement
+        return statement.fetchCursor(arguments: arguments) {
+            if sqlite3_column_type(sqliteStatement, columnIndex) == SQLITE_NULL {
+                return nil
+            }
+            return Wrapped(sqliteStatement: sqliteStatement, index: columnIndex)
+        }
+    }
+    
+    /// Returns an array of optional values fetched from a prepared statement.
+    ///
+    ///     let statement = try db.makeSelectStatement("SELECT name FROM ...")
+    ///     let names = try Optional<String>.fetchAll(statement)  // [String?]
+    ///
+    /// - parameters:
+    ///     - statement: The statement to run.
+    ///     - arguments: Optional statement arguments.
+    ///     - adapter: Optional RowAdapter
+    /// - returns: An array of optional values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public static func fetchAll(_ statement: SelectStatement, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil) throws -> [Wrapped?] {
+        return try Array(fetchCursor(statement, arguments: arguments, adapter: adapter))
+    }
+}
+
+extension Optional where Wrapped: DatabaseValueConvertible & StatementColumnConvertible {
+    
+    // MARK: Fetching From Request
+    
+    /// Returns a cursor over optional values fetched from a fetch request.
+    ///
+    ///     let nameColumn = Column("name")
+    ///     let request = Person.select(nameColumn)
+    ///     let names = try Optional<String>.fetchCursor(db, request) // DatabaseCursor<String?>
+    ///     while let name = try names.next() { // String?
+    ///         ...
+    ///     }
+    ///
+    /// If the database is modified during the cursor iteration, the remaining
+    /// elements are undefined.
+    ///
+    /// The cursor must be iterated in a protected dispath queue.
+    ///
+    /// - parameters:
+    ///     - db: A database connection.
+    ///     - requet: A fetch request.
+    /// - returns: A cursor over fetched optional values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public static func fetchCursor(_ db: Database, _ request: Request) throws -> DatabaseCursor<Wrapped?> {
+        let (statement, adapter) = try request.prepare(db)
+        return try fetchCursor(statement, adapter: adapter)
+    }
+    
+    /// Returns an array of optional values fetched from a fetch request.
+    ///
+    ///     let nameColumn = Column("name")
+    ///     let request = Person.select(nameColumn)
+    ///     let names = try Optional<String>.fetchAll(db, request) // [String?]
+    ///
+    /// - parameter db: A database connection.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public static func fetchAll(_ db: Database, _ request: Request) throws -> [Wrapped?] {
+        let (statement, adapter) = try request.prepare(db)
+        return try fetchAll(statement, adapter: adapter)
+    }
+}
+
+extension Optional where Wrapped: DatabaseValueConvertible & StatementColumnConvertible {
+    
+    // MARK: Fetching From SQL
+    
+    /// Returns a cursor over optional values fetched from an SQL query.
+    ///
+    ///     let names = try Optional<String>.fetchCursor(db, "SELECT name FROM ...") // DatabaseCursor<String?>
+    ///     while let name = try names.next() { // String?
+    ///         ...
+    ///     }
+    ///
+    /// If the database is modified during the cursor iteration, the remaining
+    /// elements are undefined.
+    ///
+    /// The cursor must be iterated in a protected dispath queue.
+    ///
+    /// - parameters:
+    ///     - db: A database connection.
+    ///     - sql: An SQL query.
+    ///     - arguments: Optional statement arguments.
+    ///     - adapter: Optional RowAdapter
+    /// - returns: A cursor over fetched optional values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public static func fetchCursor(_ db: Database, _ sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil) throws -> DatabaseCursor<Wrapped?> {
+        return try fetchCursor(db, SQLRequest(sql, arguments: arguments, adapter: adapter))
+    }
+    
+    /// Returns an array of optional values fetched from an SQL query.
+    ///
+    ///     let names = try String.fetchAll(db, "SELECT name FROM ...") // [String?]
+    ///
+    /// - parameters:
+    ///     - db: A database connection.
+    ///     - sql: An SQL query.
+    ///     - parameter arguments: Optional statement arguments.
+    ///     - adapter: Optional RowAdapter
+    /// - returns: An array of optional values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public static func fetchAll(_ db: Database, _ sql: String, arguments: StatementArguments? = nil, adapter: RowAdapter? = nil) throws -> [Wrapped?] {
+        return try fetchAll(db, SQLRequest(sql, arguments: arguments, adapter: adapter))
+    }
+}

@@ -380,6 +380,43 @@ extension TypedRequest where Fetched: _OptionalFetchable, Fetched._Wrapped: Data
     }
 }
 
+extension TypedRequest where Fetched: _OptionalFetchable, Fetched._Wrapped: DatabaseValueConvertible & StatementColumnConvertible {
+    
+    // MARK: Fetching Optional values
+    
+    /// A cursor over fetched optional values.
+    ///
+    ///     let request: ... // Some TypedRequest that fetches Optional<String>
+    ///     let strings = try request.fetchCursor(db) // DatabaseCursor<String?>
+    ///     while let string = try strings.next() {   // String?
+    ///         ...
+    ///     }
+    ///
+    /// If the database is modified during the cursor iteration, the remaining
+    /// elements are undefined.
+    ///
+    /// The cursor must be iterated in a protected dispath queue.
+    ///
+    /// - parameter db: A database connection.
+    /// - returns: A cursor over fetched values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public func fetchCursor(_ db: Database) throws -> DatabaseCursor<Fetched._Wrapped?> {
+        return try Optional<Fetched._Wrapped>.fetchCursor(db, self)
+    }
+    
+    /// An array of fetched optional values.
+    ///
+    ///     let request: ... // Some TypedRequest that fetches Optional<String>
+    ///     let strings = try request.fetchAll(db) // [String?]
+    ///
+    /// - parameter db: A database connection.
+    /// - returns: An array of values.
+    /// - throws: A DatabaseError is thrown whenever an SQLite error occurs.
+    public func fetchAll(_ db: Database) throws -> [Fetched._Wrapped?] {
+        return try Optional<Fetched._Wrapped>.fetchAll(db, self)
+    }
+}
+
 extension TypedRequest where Fetched: Row {
 
     // MARK: Fetching Rows
