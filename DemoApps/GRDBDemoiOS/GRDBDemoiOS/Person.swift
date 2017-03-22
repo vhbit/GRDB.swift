@@ -4,6 +4,25 @@ class Person: Record {
     var id: Int64?
     var name: String
     var score: Int
+    var createdAt: Date
+    var sortingDate: Date
+    var externalCreator: String
+    var externalLink: String
+    var externalName: String
+    var imageUrl: String
+    var invitationCode: String
+    var serviceNr: String
+    var imageId: Int64
+    var ownerId: Int64
+    var inviteType: Int
+    var replyType: Int
+    var isArchived: Bool
+    var isDirty: Bool
+    var isGroup: Bool
+    var isExternal: Bool
+    var needsSync: Bool
+    var usesGlobalUserName: Bool
+
     
     init(name: String, score: Int) {
         self.name = name
@@ -28,7 +47,27 @@ class Person: Record {
         return [
             "id": id,
             "name": name,
-            "score": score]
+            "score": score,
+            "createdAt": createdAt,
+            "sortingDate": sortingDate,
+            "externalCreator": externalCreator,
+            "externalLink": externalLink,
+            "externalName": externalName,
+            "imageUrl": imageUrl,
+            "invitationCode": invitationCode,
+            "serviceNr": serviceNr,
+            "imageId": imageId,
+            "ownerId": ownerId,
+            "inviteType": inviteType,
+            "replyType": replyType,
+            "isArchived": isArchived,
+            "isDirty": isDirty,
+            "isGroup": isGroup,
+            "isExternal": isExternal,
+            "needsSync": needsSync,
+            "usesGlobalUserName": usesGlobalUserName
+
+        ]
     }
     
     override func didInsert(with rowID: Int64, for column: String?) {
